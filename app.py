@@ -3,121 +3,106 @@ import ross as rs
 import numpy as np
 import plotly.graph_objects as go
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="RotoPédago - Expert", layout="wide")
+# --- CONFIGURATION ---
+st.set_page_config(page_title="RotoPédago Pro", layout="wide")
 
-# --- CSS PERSONNALISÉ POUR LE STYLE "PROFESSEUR" ---
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    .stAlert { border-radius: 10px; }
-    </style>
-    """, unsafe_allow_html=True)
+# Style pour améliorer le contraste
+st.markdown("""<style> .stTabs [data-baseweb="tab-list"] { gap: 24px; } 
+    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; font-weight: bold; }
+    </style>""", unsafe_allow_html=True)
 
 # --- NAVIGATION ---
-st.sidebar.title("🚀 Navigation")
-mode = st.sidebar.radio("Choisir le mode :", ["🏗️ Constructeur Libre", "🎓 Mode TP Guidé"])
+st.sidebar.title("🚀 RotoPédago v2.1")
+mode = st.sidebar.radio("Navigation :", ["🏗️ Constructeur Libre", "🎓 Mode TP Guidé"])
 
-# --- BASE DE DONNÉES MATÉRIAUX (Section 4.1 du CDCF) ---
+# --- MATÉRIAUX ---
 materials_db = {
     "Acier": {"E": 211e9, "rho": 7850, "G": 81.2e9},
-    "Aluminium": {"E": 70e9, "rho": 2700, "G": 26e9},
-    "Titane": {"E": 114e9, "rho": 4500, "G": 44e9}
+    "Aluminium": {"E": 70e9, "rho": 2700, "G": 26e9}
 }
 
-# --- BARRE LATÉRALE : CONFIGURATION ---
+# --- PARAMÈTRES ---
 st.sidebar.header("🛠️ Configuration")
-
 if mode == "🎓 Mode TP Guidé":
-    st.sidebar.info("**TP n°1 : Le Rotor de Jeffcott**\nObjectif : Identifier la première vitesse critique.")
-    # On verrouille certains paramètres pour le TP
-    mat_choice = "Acier"
-    L_total = 1.0
-    D_arbre = 0.05
-    st.sidebar.text(f"Matériau : {mat_choice}")
-    st.sidebar.text(f"Longueur : {L_total} m")
-    st.sidebar.text(f"Diamètre : {D_arbre} m")
+    st.sidebar.info("🎯 **Objectif :** Trouver la vitesse critique (RPM).")
+    mat_choice, L_total, D_arbre = "Acier", 1.0, 0.05
 else:
-    mat_choice = st.sidebar.selectbox("Matériau de l'arbre", list(materials_db.keys()))
-    L_total = st.sidebar.slider("Longueur de l'arbre (m)", 0.5, 2.0, 1.0)
-    D_arbre = st.sidebar.slider("Diamètre de l'arbre (m)", 0.02, 0.1, 0.05)
+    mat_choice = st.sidebar.selectbox("Matériau", list(materials_db.keys()))
+    L_total = st.sidebar.slider("Longueur (m)", 0.5, 2.0, 1.0)
+    D_arbre = st.sidebar.slider("Diamètre (m)", 0.02, 0.1, 0.05)
 
-m_disque = st.sidebar.number_input("Masse du disque (kg)", 1.0, 50.0, 10.0)
-pos_disque = st.sidebar.slider("Position du disque (m)", 0.0, L_total, L_total/2)
+m_disque = st.sidebar.number_input("Masse disque (kg)", 1.0, 50.0, 10.0)
+pos_disque = st.sidebar.slider("Position disque (m)", 0.0, L_total, L_total/2)
 k_palier = st.sidebar.select_slider("Rigidité Paliers (N/m)", options=[1e6, 1e7, 1e8], value=1e7)
 
-# --- MOTEUR DE CALCUL ROSS ---
-def build_rotor():
-    mat = rs.Material(name=mat_choice, rho=materials_db[mat_choice]['rho'], 
-                      E=materials_db[mat_choice]['E'], G_s=materials_db[mat_choice]['G'])
-    n_elem = 20
-    shaft = [rs.ShaftElement(L=L_total/n_elem, idl=0, odl=D_arbre, material=mat) for _ in range(n_elem)]
-    
-    # Disque
-    node_d = int((pos_disque / L_total) * n_elem)
-    disks = [rs.DiskElement.from_geometry(n=node_d, material=mat, width=0.07, i_d=0, o_d=D_arbre*4)]
-    
-    # Paliers
-    bearings = [rs.BearingElement(n=0, kxx=k_palier, cxx=1e3), 
-                rs.BearingElement(n=n_elem, kxx=k_palier, cxx=1e3)]
-    
+# --- CALCUL DU ROTOR ---
+@st.cache_resource # Pour éviter de recalculer si les paramètres ne changent pas
+def get_rotor(L, D, m, pos, k, mat_name):
+    mat = rs.Material(name=mat_name, rho=materials_db[mat_name]['rho'], 
+                      E=materials_db[mat_name]['E'], G_s=materials_db[mat_name]['G'])
+    n_elem = 10
+    shaft = [rs.ShaftElement(L=L/n_elem, idl=0, odl=D, material=mat) for _ in range(n_elem)]
+    node_d = int((pos / L) * n_elem)
+    disks = [rs.DiskElement.from_geometry(n=node_d, material=mat, width=0.06, i_d=0, o_d=D*4)]
+    bearings = [rs.BearingElement(n=0, kxx=k, cxx=1e3), rs.BearingElement(n=n_elem, kxx=k, cxx=1e3)]
     return rs.Rotor(shaft, disks, bearings)
 
-rotor = build_rotor()
+rotor = get_rotor(L_total, D_arbre, m_disque, pos_disque, k_palier, mat_choice)
 
-# --- AFFICHAGE PRINCIPAL ---
+# --- INTERFACE ---
 st.title(f"🎓 RotoPédago - {mode}")
 
 if mode == "🏗️ Constructeur Libre":
-    t1, t2, t3 = st.tabs(["📊 Analyses", "🎬 Animation des Modes", "📝 Rapport"])
+    t1, t2, t3, t4 = st.tabs(["🏗️ Modèle", "📊 Campbell", "📈 Balourd (Bode)", "🎬 Modes 3D"])
     
     with t1:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Modèle Géométrique")
-            st.plotly_chart(rotor.plot_rotor(), use_container_width=True)
-        with col2:
-            st.subheader("Diagramme de Campbell")
-            campbell = rotor.run_campbell(np.linspace(0, 2000, 50))
-            st.plotly_chart(campbell.plot(), use_container_width=True)
-            
+        st.plotly_chart(rotor.plot_rotor(), use_container_width=True)
+        st.write(rotor.summary())
+        
     with t2:
-        st.subheader("Animation 3D des Modes Propres")
-        mode_idx = st.selectbox("Choisir le mode à visualiser", [0, 1, 2], format_func=lambda x: f"Mode n°{x+1}")
-        # Calcul modal
-        modal = rotor.run_modal(speed=0)
-        fig_mode = modal.plot_mode_shape(mode=mode_idx)
-        st.plotly_chart(fig_mode, use_container_width=True)
-        st.info("Utilisez la souris pour faire pivoter le rotor et observer la déformée.")
+        with st.spinner('Calcul du diagramme de Campbell...'):
+            speeds = np.linspace(0, 1500, 40)
+            fig_camp = rotor.run_campbell(speeds).plot()
+            st.plotly_chart(fig_camp, use_container_width=True)
 
     with t3:
-        st.subheader("Résumé Technique")
-        st.write(rotor.summary())
+        st.subheader("Réponse au Balourd (Amplitude & Phase)")
+        with st.spinner('Simulation du balourd...'):
+            # On place un balourd sur le disque (0.01 kg.m)
+            node_d = int((pos_disque / L_total) * 10)
+            resp = rotor.run_unbalance_response(node=node_d, unbalance=0.01, frequency=np.linspace(0, 1500, 100))
+            fig_bode = resp.plot(probe=[(node_d, 0)]) # Sonde sur le disque
+            st.plotly_chart(fig_bode, use_container_width=True)
+
+    with t4:
+        st.subheader("Animation du Mode Propre")
+        m_idx = st.selectbox("Mode :", [0, 1, 2], format_func=lambda x: f"Mode {x+1}")
+        fig_modal = rotor.run_modal(speed=0).plot_mode_shape(mode=m_idx)
+        st.plotly_chart(fig_modal, use_container_width=True)
 
 else:
-    # --- INTERFACE TP GUIDÉ ---
-    st.subheader("Exercice : Analyse d'un rotor suspendu")
-    st.write("Analysez le diagramme de Campbell ci-dessous pour trouver la première vitesse critique (intersection 1X).")
+    # --- MODE TP ---
+    st.subheader("TP n°1 : Identification de la vitesse critique")
+    st.markdown("Observez le diagramme de Campbell ci-dessous. À quel régime (RPM) la droite **1X** croise-t-elle le **premier mode** ?")
     
-    campbell = rotor.run_campbell(np.linspace(0, 1000, 50))
-    st.plotly_chart(campbell.plot(), use_container_width=True)
+    with st.spinner('Génération des données TP...'):
+        speeds_tp = np.linspace(0, 1200, 40)
+        camp_tp = rotor.run_campbell(speeds_tp)
+        st.plotly_chart(camp_tp.plot(), use_container_width=True)
     
-    # Calcul de la valeur réelle pour vérification
-    v_critique_reelle = campbell.critical_speeds()[0] # Rad/s
-    v_critique_rpm = v_critique_reelle * 30 / np.pi
+    # Calcul de la vérité terrain
+    v_crit_rad = camp_tp.critical_speeds()[0]
+    v_crit_rpm = v_crit_rad * 30 / np.pi
     
     st.divider()
-    st.subheader("📝 Votre réponse")
-    user_answer = st.number_input("Quelle est la 1ère vitesse critique en RPM ?", value=0.0)
-    
-    if st.button("Valider la réponse"):
-        erreur = abs(user_answer - v_critique_rpm) / v_critique_rpm
-        if erreur < 0.05: # 5% de marge d'erreur
-            st.success(f"✅ Bravo ! La valeur exacte est {v_critique_rpm:.1f} RPM. Vous avez bien identifié l'intersection.")
+    ans = st.number_input("Entrez votre réponse en RPM :", value=0.0)
+    if st.button("Vérifier"):
+        error = abs(ans - v_crit_rpm) / v_crit_rpm
+        if error < 0.05:
+            st.success(f"✅ Correct ! La vitesse critique est de {v_crit_rpm:.0f} RPM.")
             st.balloons()
         else:
-            st.error(f"❌ Ce n'est pas tout à fait ça. Regardez bien l'intersection entre la droite 1X et la première courbe bleue.")
+            st.error(f"❌ Erreur. Indice : regardez l'intersection vers {v_crit_rpm:.0f} RPM.")
 
-# --- FOOTER ---
-st.markdown("---")
-st.caption("Application développée pour le concours de Professeur Universitaire - Basée sur ROSS Library.")
+st.sidebar.markdown("---")
+st.sidebar.caption("Développé pour l'Expertise en Vibrations Mécaniques.")
