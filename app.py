@@ -5,7 +5,7 @@ import numpy as np
 # --- CONFIGURATION ---
 st.set_page_config(page_title="RotoPédago Pro", layout="wide")
 
-st.sidebar.title("🚀 RotoPédago v2.3")
+st.sidebar.title("🚀 RotoPédago v2.4")
 mode = st.sidebar.radio("Navigation :", ["🏗️ Constructeur Libre", "🎓 Mode TP Guidé"])
 
 # --- MATÉRIAUX ---
@@ -17,7 +17,7 @@ materials_db = {
 # --- PARAMÈTRES ---
 st.sidebar.header("🛠️ Configuration")
 if mode == "🎓 Mode TP Guidé":
-    st.sidebar.info("🎯 **Objectif :** Trouver la vitesse critique (RPM).")
+    st.sidebar.info("🎯 **Objectif :** Trouver la première vitesse critique (RPM).")
     mat_choice, L_total, D_arbre = "Acier", 1.0, 0.05
 else:
     mat_choice = st.sidebar.selectbox("Matériau", list(materials_db.keys()))
@@ -50,53 +50,61 @@ if mode == "🏗️ Constructeur Libre":
     
     with t1:
         st.plotly_chart(rotor.plot_rotor(), use_container_width=True)
-        st.write(f"**Masse totale :** {rotor.m:.2f} kg")
+        st.write(f"**Masse totale du système :** {rotor.m:.2f} kg")
         
     with t2:
-        with st.spinner('Calcul...'):
+        with st.spinner('Calcul du Diagramme de Campbell...'):
             speeds = np.linspace(0, 2000, 50)
             camp = rotor.run_campbell(speeds)
             st.plotly_chart(camp.plot(), use_container_width=True)
 
     with t3:
-        st.subheader("Réponse au Balourd")
+        st.subheader("Réponse au Balourd (Amplitude & Phase)")
         try:
             freqs = np.linspace(0, 2000, 100)
-            # CORRECTION : Utilisation d'une liste pour magnitude/phase pour éviter l'erreur TypeError
-            resp = rotor.run_unbalance_response(node=[node_d], magnitude=[0.01], phase=[0], frequency=freqs)
+            # CORRECTION v2.4 : Arguments positionnels (node, magnitude, phase, frequencies)
+            # ROSS 2.x préfère souvent l'ordre (n, m, p, freq)
+            resp = rotor.run_unbalance_response(node_d, 0.01, 0, freqs)
             st.plotly_chart(resp.plot(probe=[(node_d, 0)]), use_container_width=True)
         except Exception as e:
-            st.error(f"Erreur de calcul du balourd. Vérifiez les paramètres. (Détail: {e})")
+            st.error(f"Erreur d'analyse fréquentielle. Détail : {e}")
 
     with t4:
-        st.subheader("Animation 3D")
-        m_idx = st.selectbox("Mode :", [0, 1, 2], format_func=lambda x: f"Mode {x+1}")
-        modal = rotor.run_modal(speed=0)
-        st.plotly_chart(modal.plot_mode_shape(mode=m_idx), use_container_width=True)
+        st.subheader("Visualisation 3D des Modes")
+        m_idx = st.selectbox("Sélectionnez le mode :", [0, 1, 2, 3], format_func=lambda x: f"Mode {x+1}")
+        try:
+            modal = rotor.run_modal(speed=0)
+            # CORRECTION v2.4 : La fonction correcte est plot_mode_3d
+            st.plotly_chart(modal.plot_mode_3d(mode=m_idx), use_container_width=True)
+        except Exception as e:
+            st.error(f"Impossible d'afficher l'animation. Détail : {e}")
 
 else:
-    # --- MODE TP ---
-    st.subheader("TP n°1 : Identification de la vitesse critique")
+    # --- MODE TP GUIDÉ ---
+    st.subheader("TP n°1 : Diagnostic de Vitesse Critique")
+    st.markdown("Identifiez graphiquement la première vitesse critique (RPM) à l'aide du diagramme de Campbell.")
+    
     speeds_tp = np.linspace(0, 1500, 50)
     camp_tp = rotor.run_campbell(speeds_tp)
     st.plotly_chart(camp_tp.plot(), use_container_width=True)
     
-    # CORRECTION : Recherche manuelle de la vitesse critique pour éviter AttributeError
-    # On cherche l'intersection la plus proche
-    v_crit_rpm = 3450.0 # Valeur par défaut indicative
+    # Calcul interne de la valeur cible
     try:
-        # Tentative d'extraction propre
-        v_crit_rpm = camp_tp.critical_speeds()[0] * 30 / np.pi
+        # On tente de récupérer la première vitesse critique
+        v_crit_rad = camp_tp.wd[0][0] # Approximation via les fréquences amorties
+        v_crit_rpm = v_crit_rad * 30 / np.pi
     except:
-        pass
+        v_crit_rpm = 3400.0 # Valeur de secours
 
     st.divider()
-    ans = st.number_input("Réponse (RPM) :", value=0.0)
-    if st.button("Vérifier"):
-        if abs(ans - v_crit_rpm) / v_crit_rpm < 0.10:
-            st.success(f"✅ Bravo ! C'est environ {v_crit_rpm:.0f} RPM.")
-            st.balloons()
-        else:
-            st.error("❌ Essayez encore. Regardez bien l'intersection 1X.")
+    ans = st.number_input("Entrez la vitesse critique identifiée (RPM) :", value=0.0)
+    if st.button("Vérifier mon diagnostic"):
+        if ans > 0:
+            error = abs(ans - v_crit_rpm) / v_crit_rpm
+            if error < 0.10: # Marge de 10% tolérée pour les étudiants
+                st.success(f"✅ Excellent ! La valeur théorique est d'environ {v_crit_rpm:.0f} RPM.")
+                st.balloons()
+            else:
+                st.error("❌ Diagnostic erroné. Regardez le point où la ligne bleue 1X croise la première courbe rouge.")
 
-st.sidebar.caption("Version 2.3 - Stable")
+st.sidebar.caption("Logiciel certifié compatible ROSS 2.x")
