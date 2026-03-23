@@ -100,6 +100,7 @@ if mode == "🏗️ Constructeur Libre":
             num_modes_avail = len(modal.evalues) // 2 
             m_idx = st.selectbox("Mode :", range(min(num_modes_avail, 6)), format_func=lambda x: f"Mode {x+1}")
             st.plotly_chart(modal.plot_mode_3d(mode=m_idx), use_container_width=True)
+            
     except Exception as e:
         st.error(f"❌ Erreur de modélisation : {e}")
         st.info("Vérifiez que les numéros de noeuds correspondent à la structure de l'arbre.")
