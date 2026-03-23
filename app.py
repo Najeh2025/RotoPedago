@@ -4,110 +4,120 @@ import numpy as np
 import plotly.graph_objects as go
 
 # --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="RotoPédago - Expert Vibration", layout="wide")
+st.set_page_config(page_title="RotoPédago - Expert", layout="wide")
 
-st.title("🎓 RotoPédago : Laboratoire Virtuel de Rotodynamique")
+# --- CSS PERSONNALISÉ POUR LE STYLE "PROFESSEUR" ---
 st.markdown("""
-Cette application est un outil pédagogique basé sur la bibliothèque open-source **ROSS**. 
-Elle permet d'étudier la dynamique des machines tournantes : vitesses critiques, modes de vibration et diagramme de Campbell.
-""")
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stAlert { border-radius: 10px; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- BARRE LATÉRALE : PARAMÈTRES DU SYSTÈME ---
-st.sidebar.header("🛠️ Configuration du Rotor")
+# --- NAVIGATION ---
+st.sidebar.title("🚀 Navigation")
+mode = st.sidebar.radio("Choisir le mode :", ["🏗️ Constructeur Libre", "🎓 Mode TP Guidé"])
 
-# Matériau
-st.sidebar.subheader("1. Matériau (Acier par défaut)")
-E = 211e9  # Pa
-rho = 7850 # kg/m3
-G = 81.2e9 # Pa
+# --- BASE DE DONNÉES MATÉRIAUX (Section 4.1 du CDCF) ---
+materials_db = {
+    "Acier": {"E": 211e9, "rho": 7850, "G": 81.2e9},
+    "Aluminium": {"E": 70e9, "rho": 2700, "G": 26e9},
+    "Titane": {"E": 114e9, "rho": 4500, "G": 44e9}
+}
 
-# Géométrie de l'arbre
-st.sidebar.subheader("2. Géométrie de l'Arbre")
-L_total = st.sidebar.slider("Longueur totale (m)", 0.2, 2.0, 1.0, step=0.1)
-D_arbre = st.sidebar.slider("Diamètre de l'arbre (m)", 0.01, 0.1, 0.05)
+# --- BARRE LATÉRALE : CONFIGURATION ---
+st.sidebar.header("🛠️ Configuration")
 
-# Disque
-st.sidebar.subheader("3. Propriétés du Disque")
+if mode == "🎓 Mode TP Guidé":
+    st.sidebar.info("**TP n°1 : Le Rotor de Jeffcott**\nObjectif : Identifier la première vitesse critique.")
+    # On verrouille certains paramètres pour le TP
+    mat_choice = "Acier"
+    L_total = 1.0
+    D_arbre = 0.05
+    st.sidebar.text(f"Matériau : {mat_choice}")
+    st.sidebar.text(f"Longueur : {L_total} m")
+    st.sidebar.text(f"Diamètre : {D_arbre} m")
+else:
+    mat_choice = st.sidebar.selectbox("Matériau de l'arbre", list(materials_db.keys()))
+    L_total = st.sidebar.slider("Longueur de l'arbre (m)", 0.5, 2.0, 1.0)
+    D_arbre = st.sidebar.slider("Diamètre de l'arbre (m)", 0.02, 0.1, 0.05)
+
 m_disque = st.sidebar.number_input("Masse du disque (kg)", 1.0, 50.0, 10.0)
 pos_disque = st.sidebar.slider("Position du disque (m)", 0.0, L_total, L_total/2)
-
-# Paliers
-st.sidebar.subheader("4. Rigidité des Paliers (N/m)")
-k_palier = st.sidebar.select_slider(
-    "Rigidité (k)",
-    options=[1e5, 1e6, 1e7, 1e8, 1e9],
-    value=1e7
-)
-c_palier = 1e3 # Amortissement fixe pour simplification
+k_palier = st.sidebar.select_slider("Rigidité Paliers (N/m)", options=[1e6, 1e7, 1e8], value=1e7)
 
 # --- MOTEUR DE CALCUL ROSS ---
-def create_rotor(L, D, m, pos, k, c):
-    # Création de l'arbre (divisé en 10 éléments)
-    n_elem = 10
-    le = L / n_elem
-    shaft_elements = [
-        rs.ShaftElement(L=le, idl=0, odl=D, material=rs.Material(name="Steel", rho=rho, E=E, G_s=G))
-        for _ in range(n_elem)
-    ]
+def build_rotor():
+    mat = rs.Material(name=mat_choice, rho=materials_db[mat_choice]['rho'], 
+                      E=materials_db[mat_choice]['E'], G_s=materials_db[mat_choice]['G'])
+    n_elem = 20
+    shaft = [rs.ShaftElement(L=L_total/n_elem, idl=0, odl=D_arbre, material=mat) for _ in range(n_elem)]
     
-    # Ajout du disque (on trouve le noeud le plus proche de la position choisie)
-    node_disque = int((pos / L) * n_elem)
-    disks = [rs.DiskElement.from_geometry(n=node_disque, material=rs.Material(name="Steel", rho=rho, E=E, G_s=G), 
-                                         width=0.05, i_d=0, o_d=D*4)] # Masse simplifiée par géométrie
+    # Disque
+    node_d = int((pos_disque / L_total) * n_elem)
+    disks = [rs.DiskElement.from_geometry(n=node_d, material=mat, width=0.07, i_d=0, o_d=D_arbre*4)]
     
-    # Ajout des paliers aux extrémités
-    bearings = [
-        rs.BearingElement(n=0, kxx=k, cxx=c),
-        rs.BearingElement(n=n_elem, kxx=k, cxx=c)
-    ]
+    # Paliers
+    bearings = [rs.BearingElement(n=0, kxx=k_palier, cxx=1e3), 
+                rs.BearingElement(n=n_elem, kxx=k_palier, cxx=1e3)]
     
-    return rs.Rotor(shaft_elements, disks, bearings)
+    return rs.Rotor(shaft, disks, bearings)
 
-rotor = create_rotor(L_total, D_arbre, m_disque, pos_disque, k_palier, c_palier)
+rotor = build_rotor()
 
-# --- AFFICHAGE PRINCIPAL (ONGLETS) ---
-tab1, tab2, tab3 = st.tabs(["🏗️ Modèle 3D", "📊 Diagramme de Campbell", "💡 Guide Pédagogique"])
+# --- AFFICHAGE PRINCIPAL ---
+st.title(f"🎓 RotoPédago - {mode}")
 
-with tab1:
-    st.subheader("Visualisation du modèle par Éléments Finis")
-    fig_static = rotor.plot_rotor()
-    st.plotly_chart(fig_static, use_container_width=True)
-    st.info(f"Le rotor est composé de {len(rotor.elements)} éléments. Le disque est placé au noeud correspondant à {pos_disque}m.")
+if mode == "🏗️ Constructeur Libre":
+    t1, t2, t3 = st.tabs(["📊 Analyses", "🎬 Animation des Modes", "📝 Rapport"])
+    
+    with t1:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Modèle Géométrique")
+            st.plotly_chart(rotor.plot_rotor(), use_container_width=True)
+        with col2:
+            st.subheader("Diagramme de Campbell")
+            campbell = rotor.run_campbell(np.linspace(0, 2000, 50))
+            st.plotly_chart(campbell.plot(), use_container_width=True)
+            
+    with t2:
+        st.subheader("Animation 3D des Modes Propres")
+        mode_idx = st.selectbox("Choisir le mode à visualiser", [0, 1, 2], format_func=lambda x: f"Mode n°{x+1}")
+        # Calcul modal
+        modal = rotor.run_modal(speed=0)
+        fig_mode = modal.plot_mode_shape(mode=mode_idx)
+        st.plotly_chart(fig_mode, use_container_width=True)
+        st.info("Utilisez la souris pour faire pivoter le rotor et observer la déformée.")
 
-with tab2:
-    st.subheader("Analyse des Fréquences Propres")
-    
-    vitesse_max_rpm = st.number_input("Vitesse max pour l'analyse (RPM)", 5000, 50000, 20000)
-    samples = np.linspace(0, vitesse_max_rpm * np.pi/30, 50)
-    
-    campbell = rotor.run_campbell(samples)
-    fig_campbell = campbell.plot()
-    
-    st.plotly_chart(fig_campbell, use_container_width=True)
-    
-    st.success("""
-    **Interprétation :**
-    - Les lignes diagonales représentent les excitations (1x, 2x...).
-    - Les intersections avec les courbes de fréquences propres indiquent les **Vitesses Critiques**.
-    - Remarquez comment les modes se séparent (Forward/Backward) à cause de l'effet gyroscopique.
-    """)
+    with t3:
+        st.subheader("Résumé Technique")
+        st.write(rotor.summary())
 
-with tab3:
-    st.header("Étude de cas : L'influence de la rigidité")
-    st.write("""
-    En tant qu'élève ingénieur, essayez de manipuler le curseur **'Rigidité (k)'** dans la barre latérale.
+else:
+    # --- INTERFACE TP GUIDÉ ---
+    st.subheader("Exercice : Analyse d'un rotor suspendu")
+    st.write("Analysez le diagramme de Campbell ci-dessous pour trouver la première vitesse critique (intersection 1X).")
     
-    **Questions de réflexion :**
-    1. Si vous augmentez la rigidité des paliers, vers où se déplacent les vitesses critiques ?
-    2. Pourquoi la première fréquence propre augmente-t-elle alors que la masse reste identique ?
-    3. Quel est l'impact du diamètre de l'arbre sur la flèche statique (voir onglet Modèle) ?
-    """)
+    campbell = rotor.run_campbell(np.linspace(0, 1000, 50))
+    st.plotly_chart(campbell.plot(), use_container_width=True)
     
-    if k_palier < 1e6:
-        st.warning("⚠️ Attention : Avec une rigidité faible, le rotor se comporte comme un corps rigide sur ses supports.")
-    else:
-        st.info("ℹ️ Note : Avec une rigidité élevée, les modes de flexion de l'arbre deviennent prédominants.")
+    # Calcul de la valeur réelle pour vérification
+    v_critique_reelle = campbell.critical_speeds()[0] # Rad/s
+    v_critique_rpm = v_critique_reelle * 30 / np.pi
+    
+    st.divider()
+    st.subheader("📝 Votre réponse")
+    user_answer = st.number_input("Quelle est la 1ère vitesse critique en RPM ?", value=0.0)
+    
+    if st.button("Valider la réponse"):
+        erreur = abs(user_answer - v_critique_rpm) / v_critique_rpm
+        if erreur < 0.05: # 5% de marge d'erreur
+            st.success(f"✅ Bravo ! La valeur exacte est {v_critique_rpm:.1f} RPM. Vous avez bien identifié l'intersection.")
+            st.balloons()
+        else:
+            st.error(f"❌ Ce n'est pas tout à fait ça. Regardez bien l'intersection entre la droite 1X et la première courbe bleue.")
 
-# --- PIED DE PAGE ---
+# --- FOOTER ---
 st.markdown("---")
-st.caption(f"Développé pour le concours de promotion au grade de Professeur - Expert : Dynamique des Machines Tournantes.")
+st.caption("Application développée pour le concours de Professeur Universitaire - Basée sur ROSS Library.")
