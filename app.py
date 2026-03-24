@@ -1195,7 +1195,7 @@ def render_free_mode():
             _CACHE["free_rotor"] = None
 
     rotor = _CACHE.get("free_rotor")
-   if "free_rotor" in st.session_state:
+    if "free_rotor" in st.session_state:
         rotor = st.session_state.free_rotor # On récupère le rotor stocké
     
         tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique"])
