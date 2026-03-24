@@ -1,6 +1,15 @@
-# RotoPédago v5.0 — Dépendances (Streamlit Cloud compatible)
+# RotoPédago v5.1 — Dépendances Streamlit Cloud / local
+streamlit>=1.33
 ross-rotordynamics
-numpy
-scipy
-pandas
-plotly
+numpy>=1.24
+scipy>=1.10
+pandas>=2.0
+plotly>=5.20
+reportlab>=4.0
+
+# RotoPédago v5.0 — Dépendances (Streamlit Cloud compatible)
+#ross-rotordynamics
+#numpy
+#scipy
+#pandas
+#plotly
