@@ -1,11 +1,10 @@
-# RotoPédago v5.0 — Dépendances Minimales
-# Compatible Python 3.10-3.11
+# RotoPédago v5.0 — Dépendances
+# Pinnez les versions pour la reproductibilité des résultats TP
 
-streamlit>=1.28.0
-plotly>=5.17.0
-numpy>=1.24.0,<2.0.0
+streamlit==1.28.0
+plotly==5.17.0
+ross-rotordynamic>=0.4.0
+numpy>=1.24.0
 scipy>=1.10.0
 pandas>=2.0.0
-ross-rotordynamic>=0.4.0
-Pillow>=10.0.0
-rich>=10.14.0
+reportlab==4.0.0      # Export PDF
