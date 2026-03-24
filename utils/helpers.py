@@ -62,7 +62,7 @@ def format_frequency(fn_rad_s: float, unit: str = "Hz") -> str:
 # =============================================================================
 
 def get_log_dec_color(log_dec: float) -> str:
-    """Retourne une couleur hex pour le Log Decrément."""
+    """Retourne une couleur hex pour le Log Décrément."""
     if log_dec > 0.3:
         return "#22863A"  # Vert
     elif log_dec > 0.1:
@@ -75,10 +75,11 @@ def get_log_dec_color(log_dec: float) -> str:
 
 def create_badge_html(badge_type: str, tp_id: str) -> str:
     """Génère le HTML pour un badge de réussite."""
-    badges = {
-        "gold": ('<span class="badge badge-gold">🥇', "Or</span>"),
-        "silver": ('<span class="badge badge-silver">🥈', "Argent</span>'),
-        "bronze": ('<span class="badge badge-bronze">🥉', "Bronze</span>")
-    }
-    prefix, suffix = badges.get(badge_type, ('<span class="badge">', "</span>"))
-    return f"{prefix} {tp_id} — {suffix}"
+    if badge_type == "gold":
+        return f"<span class='badge badge-gold'>Or - {tp_id}</span>"
+    elif badge_type == "silver":
+        return f"<span class='badge badge-silver'>Argent - {tp_id}</span>"
+    elif badge_type == "bronze":
+        return f"<span class='badge badge-bronze'>Bronze - {tp_id}</span>"
+    else:
+        return f"<span class='badge'>{tp_id}</span>"
