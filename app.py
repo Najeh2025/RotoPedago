@@ -1200,27 +1200,30 @@ if "free_rotor" in st.session_state:
     
     tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique"])
     
-    with tabs[1]: # Onglet Modal
-        if st.button("Calculer les modes", key="free_modal"):
-            engine = SimulationEngine(rotor)
-            modal = engine.run_modal()
-            # On stocke aussi le résultat modal pour qu'il ne disparaisse pas au prochain clic
-            st.session_state.free_modal = modal
-            
-        # On affiche si le résultat existe en session
-        if "free_modal" in st.session_state:
-            modal = st.session_state.free_modal
-            st.dataframe(_modal_table(modal), use_container_width=True)
-            mode_i = st.selectbox("Mode :", range(min(6, len(modal.evalues)//2)))
+   with tabs[1]:
+            if st.button("Calculer les modes", key="free_modal_btn"):
+                engine = SimulationEngine(rotor)
+                modal = engine.run_modal()
+                # On sauvegarde le résultat pour éviter qu'il ne disparaisse au prochain clic
+                st.session_state.free_modal = modal
+
+            # On vérifie si le résultat existe dans la mémoire de session
+            if "free_modal" in st.session_state:
+                modal = st.session_state.free_modal
+                st.dataframe(_modal_table(modal), use_container_width=True, hide_index=True)
+                
+                # Sélection du mode (doit être aligné avec st.dataframe)
+                mode_i = st.selectbox("Sélection du mode :", range(min(6, len(modal.evalues)//2)))
+                
+                # Bloc de tracé (doit être aligné avec mode_i)
                 try:
-                    # Correction de la syntaxe et du nom de la variable (mode_i)
                     fig_modal = safe_plot(modal, mode=mode_i)
                     if fig_modal:
                         st.plotly_chart(fig_modal, use_container_width=True)
                     else:
-                        st.info("Déformée modale non disponible.")
+                        st.info("Déformée modale non disponible pour ce mode.")
                 except Exception as e:
-                    st.error(f"Erreur d'affichage : {e}")
+                    st.error(f"Erreur d'affichage du mode : {e}")
 
         with tabs[2]:
             v_max = st.slider("Vitesse max (RPM)", 1000, 20000, 8000, key="free_camp_vmax")
