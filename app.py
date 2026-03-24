@@ -1199,7 +1199,23 @@ def render_free_mode():
         rotor = st.session_state.free_rotor # On récupère le rotor stocké
     
         tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique"])
-       
+        with tabs[0]:
+            st.markdown("### 🏗️ Visualisation de la structure")
+            if "free_rotor" in st.session_state:
+                rotor = st.session_state.free_rotor
+                try:
+                    # Étape 1 : On génère la figure Plotly
+                    fig_geom = rotor.plot_rotor()
+                    # Étape 2 : On demande à Streamlit de l'afficher
+                    st.plotly_chart(fig_geom, use_container_width=True)
+                    
+                    st.success("Modèle 3D généré avec succès.")
+                except Exception as e:
+                    st.error(f"Erreur d'affichage géométrique : {e}")
+                    st.info("Conseil : Vérifiez que les nœuds des paliers ne sont pas superposés.")
+            else:
+                st.info("Veuillez d'abord cliquer sur 'Construire et analyser'.")
+                
         with tabs[1]:
             if st.button("Calculer les modes", key="free_modal_btn"):
                 engine = SimulationEngine(rotor)
