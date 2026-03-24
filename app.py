@@ -1259,15 +1259,15 @@ def render_free_mode():
 
         with tabs[4]:
             if st.button("Analyse statique", key="free_static"):
-            try:
-                static = rotor.run_static()
-                fig_static = safe_plot(static)
-                if fig_static:
-                    st.plotly_chart(fig_static, use_container_width=True)
-                else:
-                    st.info("Visualisation statique non disponible.")
-            except Exception as e:
-                st.error(f"Analyse statique impossible : {e}")
+                try:
+                    static = rotor.run_static()
+                    fig_static = safe_plot(static)
+                    if fig_static:
+                        st.plotly_chart(fig_static, use_container_width=True)
+                    else:
+                        st.info("Visualisation statique non disponible.")
+                except Exception as e:
+                    st.error(f"Analyse statique impossible : {e}")
 # =============================================================================
 # PAGE : DOCUMENTATION
 # =============================================================================
