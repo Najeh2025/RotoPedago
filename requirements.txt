@@ -8,7 +8,7 @@ scipy>=1.10.0
 pandas>=2.0.0
 
 # ROSS — Sera ignoré si non disponible (mode démo activé)
-ross-rotordynamic>=0.4.0
+# ross-rotordynamic>=0.4.0
 
 # Utilities
 Pillow>=10.0.0
