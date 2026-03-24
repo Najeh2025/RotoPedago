@@ -1187,6 +1187,7 @@ def render_free_mode():
                                         kxy=r[4], kyx=-r[4], cxx=r[5], cyy=r[6])
                      for r in ed_b.itertuples()]
             rotor = rs.Rotor(shaft, disks, bears)
+            st.session_state.free_rotor = rotor  # On stocke le rotor dans la session
             _CACHE["free_rotor"] = rotor
             st.success(f"✅ Rotor assemblé — {len(rotor.nodes)} nœuds | Masse : {rotor.m:.2f} kg")
         except Exception as e:
@@ -1194,24 +1195,22 @@ def render_free_mode():
             _CACHE["free_rotor"] = None
 
     rotor = _CACHE.get("free_rotor")
-    if rotor:
-        tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique"])
-
-        with tabs[0]:
-            try:
-                st.plotly_chart(rotor.plot_rotor(), use_container_width=True)
-            except Exception as e:
-                st.warning(f"Visualisation indisponible : {e}")
-            st.metric("Masse totale", f"{rotor.m:.2f} kg")
-
-        with tabs[1]:
-            if st.button("Calculer les modes", key="free_modal"):
-                engine = SimulationEngine(rotor)
-                modal = engine.run_modal()
-                _CACHE["free_modal"] = modal
-            modal = _CACHE.get("free_modal")
-            if modal:
-                st.dataframe(_modal_table(modal), use_container_width=True, hide_index=True)
+if "free_rotor" in st.session_state:
+    rotor = st.session_state.free_rotor # On récupère le rotor stocké
+    
+    tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique"])
+    
+    with tabs[1]: # Onglet Modal
+        if st.button("Calculer les modes", key="free_modal"):
+            engine = SimulationEngine(rotor)
+            modal = engine.run_modal()
+            # On stocke aussi le résultat modal pour qu'il ne disparaisse pas au prochain clic
+            st.session_state.free_modal = modal
+            
+        # On affiche si le résultat existe en session
+        if "free_modal" in st.session_state:
+            modal = st.session_state.free_modal
+            st.dataframe(_modal_table(modal), use_container_width=True)
                 mode_i = st.selectbox("Mode :", range(min(6, len(modal.evalues)//2)))
                 try:
                     # Correction de la syntaxe et du nom de la variable (mode_i)
