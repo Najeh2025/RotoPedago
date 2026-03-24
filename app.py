@@ -364,7 +364,15 @@ class RotorBuilder:
     def is_valid(self) -> bool:
         return len(self._errors) == 0
 
-
+def safe_plot(obj, preferred_methods=['plot_mode_3d', 'plot_deflected_shape', 'plot_deformation', 'plot'], **kwargs):
+    """Fonction de sécurité pour éviter les AttributeError sur les graphiques ROSS"""
+    for method in preferred_methods:
+        if hasattr(obj, method):
+            try:
+                return getattr(obj, method)(**kwargs)
+            except:
+                continue
+    return None
 # =============================================================================
 # CLASSE 2 : SimulationEngine
 # =============================================================================
@@ -855,7 +863,10 @@ def _tp11_interface(tp, validator):
             col_plot, col_info = st.columns([2, 1])
             with col_plot:
                 try:
-                    st.plotly_chart(rotor.plot_rotor(), use_container_width=True)
+                    #st.plotly_chart(rotor.plot_rotor(), use_container_width=True)
+                    fig = safe_plot(static)
+                    if fig: st.plotly_chart(fig, use_container_width=True)
+                        
                 except Exception as e:
                     st.warning(f"Visualisation 3D indisponible : {e}")
             with col_info:
@@ -903,7 +914,9 @@ def _tp12_interface(tp):
         except:
             try:
                 fig = modal.plot_mode_shape(mode=mode_idx)
-                st.plotly_chart(fig, use_container_width=True)
+                #st.plotly_chart(fig, use_container_width=True)
+                fig = safe_plot(static)
+                if fig: st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.warning(f"Visualisation de mode indisponible : {e}")
 
@@ -941,7 +954,9 @@ def _tp21_interface(tp):
         # Plot Campbell
         try:
             fig = camp.plot()
-            st.plotly_chart(fig, use_container_width=True)
+            #st.plotly_chart(fig, use_container_width=True)
+            fig = safe_plot(static)
+            if fig: st.plotly_chart(fig, use_container_width=True)
         except Exception:
             _plot_campbell_manual(camp, v_max, n_pts)
         # Droite 1X et annotation vitesses critiques
@@ -975,7 +990,9 @@ def _plot_campbell_manual(camp, v_max, n_pts):
                                  name="1X", line=dict(dash="dash", color="red")))
         fig.update_layout(xaxis_title="Vitesse (RPM)", yaxis_title="Fréquence (Hz)",
                           title="Diagramme de Campbell")
-        st.plotly_chart(fig, use_container_width=True)
+        # st.plotly_chart(fig, use_container_width=True)
+        fig = safe_plot(static)
+        if fig: st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.error(f"Impossible de tracer le Campbell : {e}")
 
@@ -1059,7 +1076,9 @@ def _tp31_interface(tp):
             fig.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="Seuil instabilité")
             fig.update_layout(xaxis_title="Vitesse (RPM)", yaxis_title="Log Décrément",
                               title=f"Stabilité — Kxy = {kxy_val:.1e} N/m")
-            st.plotly_chart(fig, use_container_width=True)
+            # st.plotly_chart(fig, use_container_width=True)
+            fig = safe_plot(static)
+            if fig: st.plotly_chart(fig, use_container_width=True)
 
             if kxy_val == 0:
                 st.markdown("<div class='status-ok'>✅ Kxy = 0 — Système stable</div>", unsafe_allow_html=True)
