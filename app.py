@@ -823,17 +823,17 @@ def _tp11_interface(tp, validator):
     with col1:
         st.markdown("**Arbre**")
         n_el = st.slider("Nombre d'éléments", 2, 10, d["n_elements"])
-        L_el = st.number_input("Longueur d'un élément (m)", 0.05, 1.0, d["L_elem"], 0.05)
-        od   = st.number_input("Diamètre extérieur (m)", 0.01, 0.3, d["od"], 0.005)
+        L_el = st.number_input("Longueur d'un élément (m)", 0.05, 1.0, float(d["L_elem"]), 0.05)
+        od   = st.number_input("Diamètre extérieur (m)", 0.01, 0.3, float(d["od"]), 0.005)
     with col2:
         st.markdown("**Disque**")
         disk_n  = st.slider("Nœud du disque", 0, n_el, min(d["disk_node"], n_el))
-        disk_od = st.number_input("Diamètre disque (m)", 0.05, 0.8, d["disk_od"], 0.01)
-        disk_w  = st.number_input("Largeur disque (m)", 0.01, 0.3, d["disk_width"], 0.01)
+        disk_od = st.number_input("Diamètre disque (m)", 0.05, 0.8, float(d["disk_od"]), 0.01)
+        disk_w  = st.number_input("Largeur disque (m)", 0.01, 0.3, float(d["disk_width"]), 0.01)
     with col3:
         st.markdown("**Paliers**")
-        kxx = st.number_input("Kxx (N/m)", 1e4, 1e9, d["kxx"], format="%.2e")
-        cxx = st.number_input("Cxx (N·s/m)", 10.0, 10000.0, d["cxx"])
+        kxx = st.number_input("Kxx (N/m)", 1e4, 1e9, float(d["kxx"]), format="%.2e")
+        cxx = st.number_input("Cxx (N·s/m)", 10.0, 10000.0, float(d["cxx"]))
 
     # Validation paramètres en temps réel
     p_check = validator.check_parameters({"n_elements": n_el, "kxx": kxx, "od": od})
@@ -911,8 +911,8 @@ def _tp21_interface(tp):
     d = tp["default_params"]
     col1, col2 = st.columns(2)
     with col1:
-        kxx = st.number_input("Kxx (N/m)", 1e5, 1e9, d["kxx"], format="%.2e")
-        kyy = st.number_input("Kyy (N/m)", 1e5, 1e9, d["kyy"], format="%.2e")
+        kxx = st.number_input("Kxx (N/m)", 1e5, 1e9, float(d["kxx"]), format="%.2e")
+        kyy = st.number_input("Kyy (N/m)", 1e5, 1e9, float(d["kyy"]), format="%.2e")
         st.metric("Ratio Kxx/Kyy", f"{kxx/kyy:.2f}")
     with col2:
         v_max = st.slider("Vitesse max (RPM)", 2000, 20000, int(d["speed_max_rpm"]))
@@ -987,7 +987,7 @@ def _tp22_interface(tp):
     col1, col2 = st.columns(2)
     with col1:
         unbal_node = st.slider("Nœud du balourd", 0, 5, d["unbalance_node"])
-        magnitude  = st.number_input("Magnitude balourd (kg·m)", 1e-5, 0.1, d["unbalance_magnitude"], format="%.5f")
+        magnitude  = st.number_input("Magnitude balourd (kg·m)", 1e-5, 0.1, float(d["unbalance_magnitude"]), format="%.5f")
         phase      = st.slider("Phase (°)", 0, 360, int(d["unbalance_phase"]))
     with col2:
         probe_node = st.slider("Nœud de mesure (probe)", 0, 5, d["probe_node"])
@@ -1071,7 +1071,7 @@ def _tp31_interface(tp):
 def _tp32_interface(tp):
     st.subheader("🏭 TP3.2 — Cas industriel complet (API 684)")
     d = tp["default_params"]
-    op_rpm = st.number_input("Vitesse opérationnelle (RPM)", 500, 10000, d["operating_rpm"])
+    op_rpm = st.number_input("Vitesse opérationnelle (RPM)", 500.0, 10000.0, float(d["operating_rpm"]))
 
     col1, col2 = st.columns(2)
     with col1:
