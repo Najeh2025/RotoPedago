@@ -1,10 +1,22 @@
-# RotoPédago v5.0 — Dépendances
-# Pinnez les versions pour la reproductibilité des résultats TP
+# RotoPédago v5.0 — Dépendances Stabilisées
+# Compatible Streamlit Cloud / Python 3.9-3.11
 
+# Core Streamlit
 streamlit==1.28.0
+
+# Visualisation
 plotly==5.17.0
-ross-rotordynamic>=0.4.0
-numpy>=1.24.0
-scipy>=1.10.0
-pandas>=2.0.0
-reportlab==4.0.0      # Export PDF
+
+# ROSS - Rotordynamic (version stable testée)
+ross-rotordynamic==0.4.2
+
+# Scientific Computing
+numpy==1.24.3
+scipy==1.10.1
+pandas==2.0.3
+
+# Export PDF (version compatible)
+reportlab==3.6.12
+
+# Utilities (optionnel mais recommandé)
+Pillow==10.0.0
