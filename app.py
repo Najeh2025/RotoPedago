@@ -5,9 +5,6 @@
 
 # IMPORTS
 # =============================================================================
-# RotoPédago v5.0 — Application Streamlit (VERSION CORRIGÉE)
-# Compatible Python 3.10-3.11 | Streamlit Cloud
-# =============================================================================
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
@@ -15,41 +12,16 @@ from plotly.subplots import make_subplots
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 import io
 import json
-import hashlib
 import traceback
-
-# Import conditionnel robuste de ROSS
-ROSS_AVAILABLE = False
-ROSS_IMPORT_ERROR = None
 
 try:
     import ross as rs
-    from ross.materials import steel as steel_material
     ROSS_AVAILABLE = True
-except ImportError as e:
-    ROSS_IMPORT_ERROR = str(e)
-except Exception as e:
-    ROSS_IMPORT_ERROR = f"{type(e).__name__}: {e}"
-
-# Import des helpers (fonctions globales pour le cache)
-try:
-    from utils.helpers import (
-        compute_modal_cached,
-        compute_campbell_cached,
-        hash_rotor_config,
-        validate_numeric_param,
-        format_frequency,
-        get_log_dec_color,
-        create_badge_html
-    )
 except ImportError:
-    # Fallback si utils/helpers.py n'est pas présent
-    def hash_rotor_config(*args): return "fallback_hash"
-    def get_log_dec_color(ld): return "#22863A" if ld > 0 else "#C00000"
-    def create_badge_html(b, t): return f"<span>{t}</span>"
+    ROSS_AVAILABLE = False
 
 # =============================================================================
 # CONFIGURATION
@@ -393,45 +365,56 @@ class RotorBuilder:
 # CLASSE 2 : SimulationEngine
 # =============================================================================
 class SimulationEngine:
-    """Moteur de simulation ROSS avec gestion d'erreurs."""
-    
-    def __init__(self, rotor, rotor_hash: Optional[str] = None):
+    """Moteur de simulation ROSS avec cache et gestion d'erreurs."""
+
+    def __init__(self, rotor):
         self.rotor = rotor
-        self.rotor_hash = rotor_hash or hash_rotor_config([], [], [])
         self._last_error: str = ""
-    
+
+    @st.cache_data(show_spinner=False)
+    def _run_modal_cached(_self, rotor_hash: str, speed: float):
+        return _self.rotor.run_modal(speed=speed)
+
     def run_modal(self, speed_rpm: float = 0.0) -> Optional[object]:
-        """Exécute l'analyse modale avec gestion d'erreur."""
-        if not ROSS_AVAILABLE:
-            self._last_error = "ROSS non disponible"
-            return None
-        
         speed_rad = speed_rpm * np.pi / 30
-        
         try:
-            # Appel direct (le cache est géré au niveau supérieur si nécessaire)
             return self.rotor.run_modal(speed=speed_rad)
         except Exception as e:
-            self._last_error = f"Erreur modale: {type(e).__name__}: {e}"
+            self._last_error = str(e)
             return None
-    
-    def run_campbell(self, speed_max_rpm: float = 8000, 
-                    n_points: int = 100) -> Optional[object]:
-        """Exécute le diagramme de Campbell."""
-        if not ROSS_AVAILABLE:
-            self._last_error = "ROSS non disponible"
-            return None
-        
+
+    def run_campbell(self, speed_max_rpm: float = 8000, n_points: int = 100) -> Optional[object]:
         try:
-            speeds_rad = np.linspace(0, speed_max_rpm * np.pi / 30, n_points)
-            return self.rotor.run_campbell(speeds_rad)
+            speeds = np.linspace(0, speed_max_rpm * np.pi / 30, n_points)
+            return self.rotor.run_campbell(speeds)
         except Exception as e:
-            self._last_error = f"Erreur Campbell: {type(e).__name__}: {e}"
+            self._last_error = str(e)
             return None
-    
+
+    def run_static(self) -> Optional[object]:
+        try:
+            return self.rotor.run_static()
+        except Exception as e:
+            self._last_error = str(e)
+            return None
+
+    def run_unbalance_response(self, node: int, magnitude: float,
+                                phase: float, freq_max: float) -> Optional[object]:
+        try:
+            return self.rotor.run_unbalance_response(
+                node=[node],
+                magnitude=[magnitude],
+                phase=[phase],
+                frequency_range=np.linspace(0, freq_max, 500)
+            )
+        except Exception as e:
+            self._last_error = str(e)
+            return None
+
     @property
     def last_error(self) -> str:
         return self._last_error
+
 
 # =============================================================================
 # CLASSE 3 : TPValidator
@@ -1380,15 +1363,6 @@ camp.plot()
 # POINT D'ENTRÉE PRINCIPAL
 # =============================================================================
 def main():
-    # --- CSS Inline (à ajouter ICI si vous déplacez) ---
-    st.markdown("""
-    <style>
-    /* --- Global --- */
-    .stTabs [data-baseweb="tab-list"] { gap: 12px; }
-    /* ... reste du CSS ... */
-    </style>
-    """, unsafe_allow_html=True)
-    # ---------------------------------------------------
     # --- Session State Initialization ---
     if "badges" not in st.session_state:
         st.session_state.badges = {}
