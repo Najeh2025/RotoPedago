@@ -1214,12 +1214,14 @@ def render_free_mode():
                 st.dataframe(_modal_table(modal), use_container_width=True, hide_index=True)
                 mode_i = st.selectbox("Mode :", range(min(6, len(modal.evalues)//2)))
                 try:
-                    st.plotly_chart(safe_plot(modal, mode=m_idx)),use_container_width=True)
-                except:
-                    try:
-                        st.plotly_chart(safe_plot(modal, mode=m_idx)), use_container_width=True)
-                    except:
+                    # Correction de la syntaxe et du nom de la variable (mode_i)
+                    fig_modal = safe_plot(modal, mode=mode_i)
+                    if fig_modal:
+                        st.plotly_chart(fig_modal, use_container_width=True)
+                    else:
                         st.info("Déformée modale non disponible.")
+                except Exception as e:
+                    st.error(f"Erreur d'affichage : {e}")
 
         with tabs[2]:
             v_max = st.slider("Vitesse max (RPM)", 1000, 20000, 8000, key="free_camp_vmax")
