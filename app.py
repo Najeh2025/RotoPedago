@@ -257,6 +257,10 @@ TP_CATALOGUE = {
     }
 }
 
+# Module-level cache for non-serializable ROSS objects
+# (Streamlit session_state cannot hold them)
+_CACHE: dict = {}
+
 # Matériau standard
 MAT_STEEL = None
 if ROSS_AVAILABLE:
@@ -858,18 +862,18 @@ def _tp11_interface(tp, validator):
                 st.metric("Masse totale", f"{rotor.m:.2f} kg")
                 st.metric("Nombre de nœuds", len(rotor.nodes))
                 st.metric("Longueur totale", f"{n_el * L_el:.3f} m")
-            st.session_state["tp11_rotor"] = rotor
-            st.session_state["tp11_modal"] = None
+            _CACHE["tp11_rotor"] = rotor
+            _CACHE["tp11_modal"] = None
 
-    rotor = st.session_state.get("tp11_rotor")
-    modal = st.session_state.get("tp11_modal")
+    rotor = _CACHE.get("tp11_rotor")
+    modal = _CACHE.get("tp11_modal")
     return rotor, modal
 
 
 def _tp12_interface(tp):
     st.subheader("📊 TP1.2 — Modes propres et déformées")
     st.info("Ce TP reprend le rotor du TP1.1. Lancez d'abord TP1.1 pour assembler votre rotor.")
-    rotor = st.session_state.get("tp11_rotor")
+    rotor = _CACHE.get("tp11_rotor")
     modal = None
     if rotor is None:
         st.warning("⚠️ Aucun rotor en mémoire — retournez à TP1.1.")
@@ -881,11 +885,11 @@ def _tp12_interface(tp):
         with st.spinner("Calcul modal..."):
             modal = engine.run_modal(speed_rpm=0)
         if modal:
-            st.session_state["tp12_modal"] = modal
+            _CACHE["tp12_modal"] = modal
         else:
             st.error(f"Erreur de calcul : {engine.last_error}")
 
-    modal = st.session_state.get("tp12_modal")
+    modal = _CACHE.get("tp12_modal")
     if modal:
         st.markdown("#### Tableau des Fréquences Propres")
         df_modal = _modal_table(modal)
@@ -926,13 +930,13 @@ def _tp21_interface(tp):
             engine = SimulationEngine(rotor)
             camp = engine.run_campbell(v_max, n_pts)
             if camp:
-                st.session_state["tp21_camp"] = camp
-                st.session_state["tp21_rotor"] = rotor
+                _CACHE["tp21_camp"] = camp
+                _CACHE["tp21_rotor"] = rotor
             else:
                 st.error(f"Erreur Campbell : {engine.last_error}")
 
-    rotor = st.session_state.get("tp21_rotor")
-    camp  = st.session_state.get("tp21_camp")
+    rotor = _CACHE.get("tp21_rotor")
+    camp  = _CACHE.get("tp21_camp")
     if camp:
         # Plot Campbell
         try:
@@ -979,7 +983,7 @@ def _plot_campbell_manual(camp, v_max, n_pts):
 def _tp22_interface(tp):
     st.subheader("🌀 TP2.2 — Réponse au balourd")
     d = tp["default_params"]
-    rotor_prev = st.session_state.get("tp11_rotor")
+    rotor_prev = _CACHE.get("tp11_rotor")
     if rotor_prev is None:
         st.warning("⚠️ Retournez à TP1.1 pour créer un rotor.")
         return None, None, None
@@ -1000,13 +1004,13 @@ def _tp22_interface(tp):
             modal = engine.run_modal()
             unbal = engine.run_unbalance_response(unbal_node, magnitude, np.deg2rad(phase), freq_max)
         if unbal:
-            st.session_state["tp22_unbal"] = unbal
-            st.session_state["tp22_modal"] = modal
+            _CACHE["tp22_unbal"] = unbal
+            _CACHE["tp22_modal"] = modal
         else:
             st.error(f"Erreur : {engine.last_error}")
 
-    unbal = st.session_state.get("tp22_unbal")
-    modal = st.session_state.get("tp22_modal")
+    unbal = _CACHE.get("tp22_unbal")
+    modal = _CACHE.get("tp22_modal")
     if unbal:
         try:
             col_a, col_b = st.columns(2)
@@ -1064,8 +1068,8 @@ def _tp31_interface(tp):
             else:
                 st.markdown("<div class='status-err'>❌ Kxy élevé — Risque d'instabilité !</div>", unsafe_allow_html=True)
 
-            st.session_state["tp31_rotor"] = rotor
-    return st.session_state.get("tp31_rotor")
+            _CACHE["tp31_rotor"] = rotor
+    return _CACHE.get("tp31_rotor")
 
 
 def _tp32_interface(tp):
@@ -1089,11 +1093,11 @@ def _tp32_interface(tp):
             engine = SimulationEngine(rotor)
             modal = engine.run_modal()
             camp  = engine.run_campbell(op_rpm * 2, 100)
-            st.session_state.update({"tp32_rotor": rotor, "tp32_modal": modal, "tp32_camp": camp})
+            _CACHE.update({"tp32_rotor": rotor, "tp32_modal": modal, "tp32_camp": camp})
 
-    rotor = st.session_state.get("tp32_rotor")
-    modal = st.session_state.get("tp32_modal")
-    camp  = st.session_state.get("tp32_camp")
+    rotor = _CACHE.get("tp32_rotor")
+    modal = _CACHE.get("tp32_modal")
+    camp  = _CACHE.get("tp32_camp")
 
     if rotor and modal:
         # Vérification API 684
@@ -1174,13 +1178,13 @@ def render_free_mode():
                                         kxy=r[4], kyx=-r[4], cxx=r[5], cyy=r[6])
                      for r in ed_b.itertuples()]
             rotor = rs.Rotor(shaft, disks, bears)
-            st.session_state["free_rotor"] = rotor
+            _CACHE["free_rotor"] = rotor
             st.success(f"✅ Rotor assemblé — {len(rotor.nodes)} nœuds | Masse : {rotor.m:.2f} kg")
         except Exception as e:
             st.error(f"❌ Erreur d'assemblage : {e}")
-            st.session_state["free_rotor"] = None
+            _CACHE["free_rotor"] = None
 
-    rotor = st.session_state.get("free_rotor")
+    rotor = _CACHE.get("free_rotor")
     if rotor:
         tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique"])
 
@@ -1195,8 +1199,8 @@ def render_free_mode():
             if st.button("Calculer les modes", key="free_modal"):
                 engine = SimulationEngine(rotor)
                 modal = engine.run_modal()
-                st.session_state["free_modal"] = modal
-            modal = st.session_state.get("free_modal")
+                _CACHE["free_modal"] = modal
+            modal = _CACHE.get("free_modal")
             if modal:
                 st.dataframe(_modal_table(modal), use_container_width=True, hide_index=True)
                 mode_i = st.selectbox("Mode :", range(min(6, len(modal.evalues)//2)))
@@ -1213,8 +1217,8 @@ def render_free_mode():
             if st.button("Calculer Campbell", key="free_camp"):
                 engine = SimulationEngine(rotor)
                 camp = engine.run_campbell(v_max, 100)
-                st.session_state["free_camp"] = camp
-            camp = st.session_state.get("free_camp")
+                _CACHE["free_camp"] = camp
+            camp = _CACHE.get("free_camp")
             if camp:
                 try:
                     st.plotly_chart(camp.plot(), use_container_width=True)
@@ -1223,7 +1227,7 @@ def render_free_mode():
 
         with tabs[3]:
             st.info("Log Dec < 0 = Instabilité. Log Dec ≥ 0.1 = Bonne stabilité.")
-            camp_stab = st.session_state.get("free_camp")
+            camp_stab = _CACHE.get("free_camp")
             if camp_stab:
                 fig_s = go.Figure()
                 try:
