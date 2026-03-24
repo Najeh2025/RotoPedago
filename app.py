@@ -1261,8 +1261,7 @@ def render_free_mode():
             if st.button("Analyse statique", key="free_static"):
                 try:
                     static = rotor.run_static()
-                    st.plotly_chart(safe_plot(static)),
- use_container_width=True)
+                    st.plotly_chart(safe_plot(static)),use_container_width=True)
                 except Exception as e:
                     st.error(f"Analyse statique impossible : {e}")
 
