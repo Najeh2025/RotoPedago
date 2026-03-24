@@ -6,10 +6,6 @@ plotly>=5.17.0
 numpy>=1.24.0,<2.0.0
 scipy>=1.10.0
 pandas>=2.0.0
-
-# ROSS — Sera ignoré si non disponible (mode démo activé)
-# ross-rotordynamic>=0.4.0
-
-# Utilities
+ross-rotordynamic>=0.4.0
 Pillow>=10.0.0
 rich>=10.14.0
