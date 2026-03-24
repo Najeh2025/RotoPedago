@@ -1380,6 +1380,15 @@ camp.plot()
 # POINT D'ENTRÉE PRINCIPAL
 # =============================================================================
 def main():
+    # --- CSS Inline (à ajouter ICI si vous déplacez) ---
+    st.markdown("""
+    <style>
+    /* --- Global --- */
+    .stTabs [data-baseweb="tab-list"] { gap: 12px; }
+    /* ... reste du CSS ... */
+    </style>
+    """, unsafe_allow_html=True)
+    # ---------------------------------------------------
     # --- Session State Initialization ---
     if "badges" not in st.session_state:
         st.session_state.badges = {}
