@@ -23,15 +23,6 @@ try:
 except ImportError:
     ROSS_AVAILABLE = False
 
-def safe_plot(obj, preferred_methods=['plot_mode_3d', 'plot_deflected_shape', 'plot_deformation', 'plot'], **kwargs):
-    """Fonction bouclier pour empêcher les erreurs AttributeError dans votre code de 1400 lignes"""
-    for method in preferred_methods:
-        if hasattr(obj, method):
-            try:
-                fig = getattr(obj, method)(**kwargs)
-                if fig is not None: return fig
-            except: continue
-    return None
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -411,17 +402,69 @@ class SimulationEngine:
             self._last_error = str(e)
             return None
 
-    def run_unbalance_response(self, node: int, magnitude: float,
-                                phase: float, freq_max: float) -> Optional[object]:
+    def run_unbalance_response(self, nodes: list, magnitudes: list,
+                                phases: list, freq_max: float,
+                                n_points: int = 500) -> Optional[object]:
+        """Réponse au balourd — compatible ROSS 0.4+ et 1.x/2.x.
+
+        Tente plusieurs signatures d'appel pour couvrir les variations d'API
+        entre les versions de ROSS (frequency_range vs speed_range).
+        """
+        freqs = np.linspace(0, freq_max, n_points)
+        # Tentative 1 : signature ROSS ≥ 1.0 (frequency_range en Hz)
         try:
             return self.rotor.run_unbalance_response(
-                node=[node],
-                magnitude=[magnitude],
-                phase=[phase],
-                frequency_range=np.linspace(0, freq_max, 500)
+                node=nodes, magnitude=magnitudes, phase=phases,
+                frequency_range=freqs
+            )
+        except TypeError:
+            pass
+        # Tentative 2 : signature ROSS 0.4.x (speed_range en rad/s)
+        try:
+            speeds = freqs * 2 * np.pi
+            return self.rotor.run_unbalance_response(
+                node=nodes, magnitude=magnitudes, phase=phases,
+                speed_range=speeds
             )
         except Exception as e:
-            self._last_error = str(e)
+            self._last_error = f"run_unbalance_response : {e}"
+            return None
+
+    def run_freq_response(self, inp: int, out: int,
+                          freq_max: float, n_points: int = 500) -> Optional[object]:
+        """Réponse fréquentielle générale H(jω) entre DDL inp et out.
+
+        Compatible ROSS ≥ 1.0 (run_freq_response) et fallback ROSS 0.4
+        (run_frequency_response). Les DDL sont exprimés comme (nœud, direction)
+        où direction 0=X, 1=Y.
+        """
+        freqs = np.linspace(0, freq_max, n_points)
+        # Tentative 1 : ROSS ≥ 1.0
+        try:
+            return self.rotor.run_freq_response(
+                inp=inp, out=out,
+                frequency_range=freqs
+            )
+        except AttributeError:
+            pass
+        except TypeError:
+            pass
+        # Tentative 2 : nom alternatif ROSS 0.4
+        try:
+            return self.rotor.run_frequency_response(
+                inp=inp, out=out,
+                frequency_range=freqs
+            )
+        except AttributeError:
+            pass
+        # Tentative 3 : via run_freq_response sans frequency_range (vitesse en rad/s)
+        try:
+            return self.rotor.run_freq_response(
+                inp=inp, out=out,
+                speed_range=freqs * 2 * np.pi
+            )
+        except Exception as e:
+            self._last_error = f"run_freq_response : {e}"
             return None
 
     @property
@@ -990,6 +1033,7 @@ def _plot_campbell_manual(camp, v_max, n_pts):
 
 
 def _tp22_interface(tp):
+    """TP2.2 — Réponse au balourd complète avec Bode magnitude/phase, Polar Bode et DAF."""
     st.subheader("🌀 TP2.2 — Réponse au balourd")
     d = tp["default_params"]
     rotor_prev = _CACHE.get("tp11_rotor")
@@ -997,43 +1041,344 @@ def _tp22_interface(tp):
         st.warning("⚠️ Retournez à TP1.1 pour créer un rotor.")
         return None, None, None
 
+    n_nodes = len(rotor_prev.nodes) - 1
+
     col1, col2 = st.columns(2)
     with col1:
-        unbal_node = st.slider("Nœud du balourd", 0, 5, d["unbalance_node"])
-        magnitude  = st.number_input("Magnitude balourd (kg·m)", 1e-5, 0.1, float(d["unbalance_magnitude"]), format="%.5f")
-        phase      = st.slider("Phase (°)", 0, 360, int(d["unbalance_phase"]))
+        st.markdown("**🔩 Paramètres du balourd**")
+        unbal_node = st.slider("Nœud du balourd", 0, n_nodes, min(d["unbalance_node"], n_nodes))
+        magnitude  = st.number_input("Magnitude (kg·m)", 1e-5, 0.1,
+                                     float(d["unbalance_magnitude"]), format="%.5f",
+                                     help="Balourd = masse résiduelle × rayon (ex: 1g × 1m = 0.001 kg·m)")
+        phase_deg  = st.slider("Phase initiale (°)", 0, 360, int(d["unbalance_phase"]))
     with col2:
-        probe_node = st.slider("Nœud de mesure (probe)", 0, 5, d["probe_node"])
-        freq_max   = st.slider("Fréquence max analyse (Hz)", 100, 5000, d["freq_max"])
+        st.markdown("**📡 Paramètres de la sonde**")
+        probe_node = st.slider("Nœud de mesure (probe)", 0, n_nodes, min(d["probe_node"], n_nodes))
+        probe_dir  = st.radio("Direction", ["X (horizontal)", "Y (vertical)"],
+                              horizontal=True)
+        probe_dof  = 0 if "X" in probe_dir else 1
+        freq_max   = st.slider("Fréquence max (Hz)", 100, 5000, d["freq_max"])
 
     modal, unbal = None, None
-    if st.button("🌀 Calculer la réponse au balourd", key="btn_tp22"):
+    if st.button("🌀 Calculer la réponse au balourd", key="btn_tp22", type="primary"):
         engine = SimulationEngine(rotor_prev)
         with st.spinner("Calcul modal + réponse au balourd..."):
             modal = engine.run_modal()
-            unbal = engine.run_unbalance_response(unbal_node, magnitude, np.deg2rad(phase), freq_max)
+            unbal = engine.run_unbalance_response(
+                nodes=[unbal_node],
+                magnitudes=[magnitude],
+                phases=[np.deg2rad(phase_deg)],
+                freq_max=float(freq_max)
+            )
         if unbal:
-            _CACHE["tp22_unbal"] = unbal
-            _CACHE["tp22_modal"] = modal
+            _CACHE["tp22_unbal"]      = unbal
+            _CACHE["tp22_modal"]      = modal
+            _CACHE["tp22_probe_node"] = probe_node
+            _CACHE["tp22_probe_dof"]  = probe_dof
+            _CACHE["tp22_freq_max"]   = float(freq_max)
+            st.success("✅ Calcul terminé")
         else:
-            st.error(f"Erreur : {engine.last_error}")
+            st.error(f"❌ Erreur ROSS : {engine.last_error}")
 
-    unbal = _CACHE.get("tp22_unbal")
-    modal = _CACHE.get("tp22_modal")
-    if unbal:
-        try:
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.markdown("**Magnitude (Bode)**")
-                fig_mag = unbal.plot_magnitude(probe=[probe_node, 0])
-                st.plotly_chart(fig_mag, use_container_width=True)
-            with col_b:
-                st.markdown("**Phase (Bode)**")
-                fig_ph = unbal.plot_phase(probe=[probe_node, 0])
-                st.plotly_chart(fig_ph, use_container_width=True)
-        except Exception as e:
-            st.warning(f"Visualisation avancée indisponible ({e}) — affichage simplifié.")
+    unbal      = _CACHE.get("tp22_unbal")
+    modal      = _CACHE.get("tp22_modal")
+    probe_node = _CACHE.get("tp22_probe_node", probe_node)
+    probe_dof  = _CACHE.get("tp22_probe_dof",  probe_dof)
+    freq_max_c = _CACHE.get("tp22_freq_max",   float(freq_max))
+
+    if unbal is None:
+        return rotor_prev, modal, unbal
+
+    # ── Métriques rapides ──────────────────────────────────────────────────
+    try:
+        _render_unbalance_metrics(unbal, modal, probe_node, probe_dof)
+    except Exception:
+        pass
+
+    # ── Onglets de visualisation ───────────────────────────────────────────
+    vtab1, vtab2, vtab3 = st.tabs(
+        ["📊 Bode Amplitude/Phase", "🎯 Bode Polaire", "📈 Superposition Campbell"]
+    )
+
+    with vtab1:
+        _plot_unbal_bode(unbal, probe_node, probe_dof, freq_max_c, modal)
+
+    with vtab2:
+        _plot_unbal_polar(unbal, probe_node, probe_dof)
+
+    with vtab3:
+        _plot_unbal_vs_campbell(unbal, rotor_prev, probe_node, probe_dof, freq_max_c)
+
     return rotor_prev, modal, unbal
+
+
+# ── Helpers TP2.2 ────────────────────────────────────────────────────────────
+
+def _extract_unbal_data(unbal, probe_node: int, probe_dof: int):
+    """Extrait fréquences et amplitudes depuis l'objet UnbalanceResponse.
+
+    Compatible avec les différentes structures internes de ROSS (1.x et 2.x).
+    Retourne (freqs_hz, amplitude_m, phase_rad) ou lève une exception.
+    """
+    # Essai 1 : attribut .data (ROSS ≥ 1.0, dict/DataFrame)
+    if hasattr(unbal, 'data') and unbal.data is not None:
+        data = unbal.data
+        if hasattr(data, 'columns'):
+            freq_col  = [c for c in data.columns if 'freq' in c.lower() or 'speed' in c.lower()]
+            amp_cols  = [c for c in data.columns if str(probe_node) in c
+                         and ('abs' in c.lower() or 'amp' in c.lower() or 'x' in c.lower())]
+            if freq_col and amp_cols:
+                freqs = np.array(data[freq_col[0]])
+                amps  = np.abs(np.array(data[amp_cols[0]], dtype=complex))
+                phases = np.angle(np.array(data[amp_cols[0]], dtype=complex))
+                return freqs, amps, phases
+
+    # Essai 2 : attribut .freq_resp (ROSS 0.4 / 1.x)
+    if hasattr(unbal, 'freq_resp') and unbal.freq_resp is not None:
+        fr   = unbal.freq_resp
+        dof  = probe_node * 4 + probe_dof  # 4 DDL par nœud
+        if hasattr(fr, 'speed_range'):
+            freqs = np.array(fr.speed_range) / (2 * np.pi)
+        elif hasattr(fr, 'frequency_range'):
+            freqs = np.array(fr.frequency_range)
+        else:
+            freqs = np.linspace(0, 5000, fr.shape[-1]) if hasattr(fr, 'shape') else None
+
+        if freqs is not None:
+            resp  = np.array(fr)
+            if resp.ndim == 3:
+                series = resp[dof, 0, :]
+            elif resp.ndim == 2:
+                series = resp[min(dof, resp.shape[0]-1), :]
+            else:
+                series = resp
+            return freqs, np.abs(series), np.angle(series)
+
+    # Essai 3 : attribut .veloc_resp / .displ_resp (legacy)
+    for attr in ('displ_resp', 'veloc_resp'):
+        if hasattr(unbal, attr):
+            resp = getattr(unbal, attr)
+            dof  = probe_node * 4 + probe_dof
+            if hasattr(resp, 'shape') and resp.ndim >= 2:
+                freqs = np.linspace(0, 5000, resp.shape[-1])
+                row   = resp[min(dof, resp.shape[0]-1), :]
+                return freqs, np.abs(row), np.angle(row)
+
+    raise AttributeError("Structure UnbalanceResponse non reconnue pour cette version de ROSS.")
+
+
+def _render_unbalance_metrics(unbal, modal, probe_node: int, probe_dof: int):
+    """Affiche les métriques clés : fréquence de résonance, amplitude max, DAF."""
+    try:
+        freqs, amps, _ = _extract_unbal_data(unbal, probe_node, probe_dof)
+        idx_max = int(np.argmax(amps))
+        f_res   = freqs[idx_max]
+        a_max   = amps[idx_max]
+        a_stat  = amps[0] if amps[0] > 0 else amps[np.argmax(freqs > 1)] if np.any(freqs > 1) else 1e-12
+        daf     = a_max / a_stat if a_stat > 0 else float('inf')
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Fréq. résonance", f"{f_res:.1f} Hz")
+        col2.metric("Amplitude max", f"{a_max*1e6:.2f} µm")
+        col3.metric("DAF", f"{daf:.1f}")
+        if modal is not None:
+            fn1 = modal.wn[0] / (2 * np.pi)
+            delta = abs(f_res - fn1) / fn1 * 100
+            col4.metric("Écart / mode 1", f"{delta:.1f}%",
+                        delta_color="inverse" if delta > 5 else "normal")
+    except Exception as e:
+        st.caption(f"Métriques indisponibles : {e}")
+
+
+def _plot_unbal_bode(unbal, probe_node: int, probe_dof: int,
+                     freq_max: float, modal=None):
+    """Diagramme de Bode : magnitude (µm) et phase (°) en fonction de la fréquence."""
+    # ── Tentative 1 : méthodes natives ROSS ───────────────────────────────
+    probe_arg = [probe_node, probe_dof]
+    native_ok = False
+    for method_name, title in [("plot_magnitude", "Amplitude (m)"),
+                                ("plot_phase",     "Phase (°)")]:
+        if hasattr(unbal, method_name):
+            col_a, col_b = st.columns(2) if method_name == "plot_magnitude" else (None, None)
+            target = col_a if method_name == "plot_magnitude" else col_b
+            try:
+                fig = getattr(unbal, method_name)(probe=probe_arg)
+                if target:
+                    with target:
+                        st.plotly_chart(fig, use_container_width=True)
+                native_ok = True
+            except Exception:
+                try:
+                    # Certaines versions attendent juste un int
+                    fig = getattr(unbal, method_name)(probe=probe_node)
+                    if target:
+                        with target:
+                            st.plotly_chart(fig, use_container_width=True)
+                    native_ok = True
+                except Exception:
+                    native_ok = False
+
+    if native_ok:
+        # Annoter les vitesses critiques si modal disponible
+        if modal is not None:
+            fn = modal.wn / (2 * np.pi)
+            st.markdown("**Vitesses critiques superposées :**  " +
+                        "  |  ".join([f"Mode {i+1} = {f:.1f} Hz"
+                                      for i, f in enumerate(fn[:4])]))
+        return
+
+    # ── Fallback : extraction manuelle + Plotly ────────────────────────────
+    try:
+        freqs, amps, phases_rad = _extract_unbal_data(unbal, probe_node, probe_dof)
+        amps_um = amps * 1e6
+
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                            subplot_titles=["Amplitude (µm)", "Phase (°)"],
+                            vertical_spacing=0.12)
+
+        fig.add_trace(go.Scatter(x=freqs, y=amps_um, name="Amplitude",
+                                 line=dict(color="#1F5C8B", width=2)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=freqs, y=np.degrees(phases_rad), name="Phase",
+                                 line=dict(color="#C55A11", width=2)), row=2, col=1)
+
+        # Lignes verticales des modes propres
+        if modal is not None:
+            fn = modal.wn / (2 * np.pi)
+            colors_mode = ["#22863A", "#E65100", "#7B1FA2", "#1565C0"]
+            for i, f in enumerate(fn[:4]):
+                for row in [1, 2]:
+                    fig.add_vline(x=f, line_dash="dot",
+                                  line_color=colors_mode[i % len(colors_mode)],
+                                  annotation_text=f"M{i+1}" if row == 1 else "",
+                                  row=row, col=1)
+
+        fig.update_xaxes(title_text="Fréquence (Hz)", row=2, col=1)
+        fig.update_yaxes(title_text="Amplitude (µm)", row=1, col=1)
+        fig.update_yaxes(title_text="Phase (°)", row=2, col=1)
+        fig.update_layout(height=500, showlegend=False,
+                          title="Diagramme de Bode — Réponse au balourd")
+        st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"❌ Impossible d'afficher le diagramme de Bode : {e}")
+        st.info("Conseil : vérifiez que ROSS est bien installé avec `pip install ross-rotordynamics`")
+
+
+def _plot_unbal_polar(unbal, probe_node: int, probe_dof: int):
+    """Diagramme de Bode Polaire : amplitude × phase dans le plan complexe."""
+    # Tentative méthode native
+    if hasattr(unbal, 'plot_polar_bode'):
+        try:
+            fig = unbal.plot_polar_bode(probe=[probe_node, probe_dof])
+            st.plotly_chart(fig, use_container_width=True)
+            return
+        except Exception:
+            pass
+        try:
+            fig = unbal.plot_polar_bode(probe=probe_node)
+            st.plotly_chart(fig, use_container_width=True)
+            return
+        except Exception:
+            pass
+
+    # Fallback manuel
+    try:
+        freqs, amps, phases_rad = _extract_unbal_data(unbal, probe_node, probe_dof)
+        x_re = amps * np.cos(phases_rad) * 1e6
+        y_im = amps * np.sin(phases_rad) * 1e6
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=x_re, y=y_im,
+            mode="lines+markers",
+            marker=dict(
+                size=5,
+                color=freqs,
+                colorscale="Viridis",
+                colorbar=dict(title="Hz"),
+                showscale=True
+            ),
+            line=dict(color="#1F5C8B", width=1.5),
+            name="Trajectoire",
+            hovertemplate="Re: %{x:.3f} µm<br>Im: %{y:.3f} µm<br><extra></extra>"
+        ))
+        # Marquer le point de résonance
+        idx_max = int(np.argmax(amps))
+        fig.add_trace(go.Scatter(
+            x=[x_re[idx_max]], y=[y_im[idx_max]],
+            mode="markers+text",
+            marker=dict(size=14, color="#C00000", symbol="star"),
+            text=[f"Résonnance<br>{freqs[idx_max]:.0f} Hz"],
+            textposition="top center",
+            name="Résonance"
+        ))
+        fig.add_shape(type="circle", x0=-0.5, y0=-0.5, x1=0.5, y1=0.5,
+                      line=dict(dash="dot", color="grey"))
+        fig.update_layout(
+            title="Diagramme de Nyquist — Réponse au balourd",
+            xaxis_title="Partie réelle (µm)",
+            yaxis_title="Partie imaginaire (µm)",
+            yaxis_scaleanchor="x",
+            height=500
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.warning(f"Diagramme polaire indisponible : {e}")
+
+
+def _plot_unbal_vs_campbell(unbal, rotor, probe_node: int, probe_dof: int, freq_max: float):
+    """Superpose la réponse au balourd sur le diagramme de Campbell."""
+    try:
+        freqs, amps, _ = _extract_unbal_data(unbal, probe_node, probe_dof)
+
+        # Campbell rapide (30 points suffit pour la superposition)
+        speeds = np.linspace(0, freq_max * 2 * np.pi, 30)
+        camp   = rotor.run_campbell(speeds)
+        speeds_rpm = speeds * 30 / np.pi
+
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+        # Courbes modales du Campbell
+        try:
+            n_modes = min(4, camp.wd.shape[1] if hasattr(camp, 'wd') else 4)
+            fn_mat  = camp.wd / (2*np.pi) if hasattr(camp, 'wd') else camp.wn/(2*np.pi)
+            palette = ["#1F5C8B", "#22863A", "#C55A11", "#7B1FA2"]
+            for i in range(n_modes):
+                fig.add_trace(go.Scatter(
+                    x=speeds_rpm, y=fn_mat[:, i],
+                    name=f"Mode {i+1}", line=dict(color=palette[i], dash="dot"),
+                    opacity=0.7
+                ), secondary_y=False)
+        except Exception:
+            pass
+
+        # Droite 1X
+        fig.add_trace(go.Scatter(
+            x=speeds_rpm, y=speeds_rpm / 60,
+            name="1X synchrone", line=dict(color="red", dash="dash"),
+            opacity=0.6
+        ), secondary_y=False)
+
+        # Réponse au balourd (axe secondaire)
+        fig.add_trace(go.Scatter(
+            x=freqs * 60, y=amps * 1e6,
+            name=f"Réponse balourd (nœud {probe_node})",
+            line=dict(color="#FF6B00", width=3),
+            fill="tozeroy", fillcolor="rgba(255,107,0,0.1)"
+        ), secondary_y=True)
+
+        fig.update_xaxes(title_text="Vitesse (RPM)")
+        fig.update_yaxes(title_text="Fréquence (Hz)", secondary_y=False)
+        fig.update_yaxes(title_text="Amplitude balourd (µm)",
+                         secondary_y=True, showgrid=False)
+        fig.update_layout(title="Campbell + Réponse au balourd superposés", height=500)
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.caption("💡 Les pics de la courbe orange (balourd) coïncident avec "
+                   "les intersections 1X des courbes de modes (vitesses critiques).")
+    except Exception as e:
+        st.info(f"Superposition Campbell/Balourd indisponible : {e}")
 
 
 def _tp31_interface(tp):
@@ -1187,7 +1532,6 @@ def render_free_mode():
                                         kxy=r[4], kyx=-r[4], cxx=r[5], cyy=r[6])
                      for r in ed_b.itertuples()]
             rotor = rs.Rotor(shaft, disks, bears)
-            st.session_state.free_rotor = rotor  # On stocke le rotor dans la session
             _CACHE["free_rotor"] = rotor
             st.success(f"✅ Rotor assemblé — {len(rotor.nodes)} nœuds | Masse : {rotor.m:.2f} kg")
         except Exception as e:
@@ -1195,51 +1539,32 @@ def render_free_mode():
             _CACHE["free_rotor"] = None
 
     rotor = _CACHE.get("free_rotor")
-    if "free_rotor" in st.session_state:
-        rotor = st.session_state.free_rotor # On récupère le rotor stocké
-    
-        tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique"])
+    if rotor:
+        tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique", "🌀 Balourd", "📡 Fréq. Response"])
+
         with tabs[0]:
-            st.markdown("### 🏗️ Visualisation de la structure")
-            if "free_rotor" in st.session_state:
-                rotor = st.session_state.free_rotor
-                try:
-                    # Étape 1 : On génère la figure Plotly
-                    fig_geom = rotor.plot_rotor()
-                    # Étape 2 : On demande à Streamlit de l'afficher
-                    st.plotly_chart(fig_geom, use_container_width=True)
-                    
-                    st.success("Modèle 3D généré avec succès.")
-                except Exception as e:
-                    st.error(f"Erreur d'affichage géométrique : {e}")
-                    st.info("Conseil : Vérifiez que les nœuds des paliers ne sont pas superposés.")
-            else:
-                st.info("Veuillez d'abord cliquer sur 'Construire et analyser'.")
-                
+            try:
+                st.plotly_chart(rotor.plot_rotor(), use_container_width=True)
+            except Exception as e:
+                st.warning(f"Visualisation indisponible : {e}")
+            st.metric("Masse totale", f"{rotor.m:.2f} kg")
+
         with tabs[1]:
-            if st.button("Calculer les modes", key="free_modal_btn"):
+            if st.button("Calculer les modes", key="free_modal"):
                 engine = SimulationEngine(rotor)
                 modal = engine.run_modal()
-                # On sauvegarde le résultat pour éviter qu'il ne disparaisse au prochain clic
-                st.session_state.free_modal = modal
-
-            # On vérifie si le résultat existe dans la mémoire de session
-            if "free_modal" in st.session_state:
-                modal = st.session_state.free_modal
+                _CACHE["free_modal"] = modal
+            modal = _CACHE.get("free_modal")
+            if modal:
                 st.dataframe(_modal_table(modal), use_container_width=True, hide_index=True)
-                
-                # Sélection du mode (doit être aligné avec st.dataframe)
-                mode_i = st.selectbox("Sélection du mode :", range(min(6, len(modal.evalues)//2)))
-                
-                # Bloc de tracé (doit être aligné avec mode_i)
+                mode_i = st.selectbox("Mode :", range(min(6, len(modal.evalues)//2)))
                 try:
-                    fig_modal = safe_plot(modal, mode=mode_i)
-                    if fig_modal:
-                        st.plotly_chart(fig_modal, use_container_width=True)
-                    else:
-                        st.info("Déformée modale non disponible pour ce mode.")
-                except Exception as e:
-                    st.error(f"Erreur d'affichage du mode : {e}")
+                    st.plotly_chart(modal.plot_mode_3d(mode=mode_i), use_container_width=True)
+                except:
+                    try:
+                        st.plotly_chart(modal.plot_mode_shape(mode=mode_i), use_container_width=True)
+                    except:
+                        st.info("Déformée modale non disponible.")
 
         with tabs[2]:
             v_max = st.slider("Vitesse max (RPM)", 1000, 20000, 8000, key="free_camp_vmax")
@@ -1279,13 +1604,221 @@ def render_free_mode():
             if st.button("Analyse statique", key="free_static"):
                 try:
                     static = rotor.run_static()
-                    fig_static = safe_plot(static)
-                    if fig_static:
-                        st.plotly_chart(fig_static, use_container_width=True)
-                    else:
-                        st.info("Visualisation statique non disponible.")
+                    st.plotly_chart(static.plot_deflected_shape(), use_container_width=True)
                 except Exception as e:
                     st.error(f"Analyse statique impossible : {e}")
+
+        # ── Onglet 6 : Réponse au balourd (Mode Libre) ────────────────────
+        with tabs[5]:
+            st.subheader("🌀 Réponse au balourd")
+            n_nodes_free = len(rotor.nodes) - 1
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                free_unbal_node = st.slider("Nœud balourd", 0, n_nodes_free,
+                                            min(2, n_nodes_free), key="fu_node")
+                free_magnitude  = st.number_input("Magnitude (kg·m)", 1e-5, 0.1, 0.001,
+                                                  format="%.5f", key="fu_mag")
+                free_phase_deg  = st.slider("Phase (°)", 0, 360, 0, key="fu_phase")
+            with col_u2:
+                free_probe_node = st.slider("Nœud probe", 0, n_nodes_free,
+                                            min(2, n_nodes_free), key="fu_probe")
+                free_probe_dir  = st.radio("Direction probe", ["X", "Y"],
+                                           horizontal=True, key="fu_dir")
+                free_probe_dof  = 0 if free_probe_dir == "X" else 1
+                free_freq_max   = st.slider("Fréquence max (Hz)", 100, 5000, 2000, key="fu_fmax")
+
+            if st.button("🌀 Calculer", key="free_unbal_btn"):
+                engine_u = SimulationEngine(rotor)
+                with st.spinner("Calcul réponse au balourd..."):
+                    res_u = engine_u.run_unbalance_response(
+                        nodes=[free_unbal_node],
+                        magnitudes=[free_magnitude],
+                        phases=[np.deg2rad(free_phase_deg)],
+                        freq_max=float(free_freq_max)
+                    )
+                if res_u:
+                    _CACHE["free_unbal"] = res_u
+                    st.success("✅ Calcul terminé")
+                else:
+                    st.error(f"❌ Erreur : {engine_u.last_error}")
+
+            free_unbal = _CACHE.get("free_unbal")
+            if free_unbal:
+                modal_u = _CACHE.get("free_modal")
+                try:
+                    _render_unbalance_metrics(free_unbal, modal_u, free_probe_node, free_probe_dof)
+                except Exception:
+                    pass
+                bvt1, bvt2, bvt3 = st.tabs(
+                    ["📊 Bode Amplitude/Phase", "🎯 Bode Polaire", "📈 + Campbell"]
+                )
+                with bvt1:
+                    _plot_unbal_bode(free_unbal, free_probe_node, free_probe_dof,
+                                     float(free_freq_max), modal_u)
+                with bvt2:
+                    _plot_unbal_polar(free_unbal, free_probe_node, free_probe_dof)
+                with bvt3:
+                    _plot_unbal_vs_campbell(free_unbal, rotor, free_probe_node,
+                                            free_probe_dof, float(free_freq_max))
+
+        # ── Onglet 7 : Réponse Fréquentielle générale (Mode Libre) ─────────
+        with tabs[6]:
+            st.subheader("📡 Réponse Fréquentielle H(jω)")
+            st.info(
+                "La réponse fréquentielle H(jω) donne le rapport déplacement/force entre "
+                "deux DDL quelconques du rotor. Utile pour identifier les chemins de transmission "
+                "des vibrations (analyse FRF)."
+            )
+            n_nodes_free = len(rotor.nodes) - 1
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                fr_inp_node = st.slider("Nœud d'excitation (inp)", 0, n_nodes_free,
+                                        0, key="fr_inp_node")
+                fr_inp_dir  = st.radio("Direction excitation", ["X (0)", "Y (1)"],
+                                        horizontal=True, key="fr_inp_dir")
+                fr_inp_dof  = fr_inp_node * 4 + (0 if "X" in fr_inp_dir else 1)
+            with col_f2:
+                fr_out_node = st.slider("Nœud de réponse (out)", 0, n_nodes_free,
+                                        min(2, n_nodes_free), key="fr_out_node")
+                fr_out_dir  = st.radio("Direction réponse", ["X (0)", "Y (1)"],
+                                        horizontal=True, key="fr_out_dir")
+                fr_out_dof  = fr_out_node * 4 + (0 if "X" in fr_out_dir else 1)
+                fr_freq_max = st.slider("Fréquence max (Hz)", 100, 5000, 2000, key="fr_fmax")
+
+            if st.button("📡 Calculer H(jω)", key="free_freq_btn"):
+                engine_f = SimulationEngine(rotor)
+                with st.spinner("Calcul réponse fréquentielle..."):
+                    res_f = engine_f.run_freq_response(
+                        inp=fr_inp_dof,
+                        out=fr_out_dof,
+                        freq_max=float(fr_freq_max)
+                    )
+                if res_f:
+                    _CACHE["free_freq"]      = res_f
+                    _CACHE["free_freq_max2"] = float(fr_freq_max)
+                    st.success("✅ Calcul terminé")
+                else:
+                    st.error(f"❌ Erreur ROSS : {engine_f.last_error}")
+
+            free_freq = _CACHE.get("free_freq")
+            if free_freq:
+                _plot_freq_response(free_freq, fr_inp_dof, fr_out_dof,
+                                    _CACHE.get("free_freq_max2", float(fr_freq_max)),
+                                    _CACHE.get("free_modal"))
+
+
+def _plot_freq_response(freq_resp, inp_dof: int, out_dof: int,
+                        freq_max: float, modal=None):
+    """Visualisation de la réponse fréquentielle H(jω) — Bode + Nyquist.
+
+    Compatible ROSS 1.x (objet FreqResponseResults avec .plot_bode()) et
+    ROSS 0.4 (extraction manuelle depuis .freq_resp).
+    """
+    # ── Tentative méthode native ROSS ──────────────────────────────────────
+    for method in ('plot_bode', 'plot_magnitude', 'plot'):
+        if hasattr(freq_resp, method):
+            try:
+                # Essai avec inp/out
+                fig = getattr(freq_resp, method)(inp=inp_dof, out=out_dof)
+                st.plotly_chart(fig, use_container_width=True)
+                return
+            except TypeError:
+                pass
+            try:
+                fig = getattr(freq_resp, method)()
+                st.plotly_chart(fig, use_container_width=True)
+                return
+            except Exception:
+                pass
+
+    # ── Extraction manuelle ────────────────────────────────────────────────
+    try:
+        H = None
+        freqs = None
+
+        # Structure ROSS 1.x : freq_resp.freq_resp[out, inp, :]
+        for attr in ('freq_resp', 'response', 'H'):
+            if hasattr(freq_resp, attr):
+                data = getattr(freq_resp, attr)
+                if hasattr(data, 'shape') and data.ndim >= 1:
+                    H = np.array(data)
+                    break
+
+        if H is None:
+            st.warning("Structure FreqResponse non reconnue pour cette version de ROSS.")
+            return
+
+        if H.ndim == 3:
+            H = H[out_dof, inp_dof, :]
+        elif H.ndim == 2:
+            H = H[min(out_dof, H.shape[0]-1), :]
+        # else H est déjà 1D
+
+        for attr in ('frequency_range', 'speed_range', 'freqs'):
+            if hasattr(freq_resp, attr):
+                freqs = np.array(getattr(freq_resp, attr))
+                if 'speed' in attr:
+                    freqs = freqs / (2 * np.pi)
+                break
+        if freqs is None:
+            freqs = np.linspace(0, freq_max, len(H))
+
+        mag_db  = 20 * np.log10(np.abs(H) + 1e-30)
+        phase_d = np.degrees(np.unwrap(np.angle(H)))
+
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                            subplot_titles=["Magnitude (dB)", "Phase (°)"],
+                            vertical_spacing=0.12)
+
+        fig.add_trace(go.Scatter(x=freqs, y=mag_db, name="Magnitude",
+                                 line=dict(color="#1F5C8B", width=2)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=freqs, y=phase_d, name="Phase",
+                                 line=dict(color="#C55A11", width=2)), row=2, col=1)
+
+        # Repères modaux
+        if modal is not None:
+            fn = modal.wn / (2 * np.pi)
+            for i, f in enumerate(fn[:6]):
+                for row in [1, 2]:
+                    fig.add_vline(x=f, line_dash="dot", line_color="#22863A", opacity=0.5,
+                                  annotation_text=f"M{i+1}" if row == 1 else "", row=row, col=1)
+
+        fig.update_xaxes(title_text="Fréquence (Hz)", row=2, col=1)
+        fig.update_yaxes(title_text="Magnitude (dB)", row=1, col=1)
+        fig.update_yaxes(title_text="Phase (°)", row=2, col=1)
+        fig.update_layout(height=520, showlegend=False,
+                          title=f"H(jω) — DDL excitation {inp_dof} → réponse {out_dof}")
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ── Diagramme de Nyquist ───────────────────────────────────────────
+        with st.expander("🔄 Diagramme de Nyquist (plan complexe)"):
+            fig_ny = go.Figure()
+            fig_ny.add_trace(go.Scatter(
+                x=H.real, y=H.imag,
+                mode="lines",
+                line=dict(color="#1F5C8B", width=2),
+                name="H(jω)",
+                hovertemplate="Re: %{x:.3e}<br>Im: %{y:.3e}<br><extra></extra>"
+            ))
+            fig_ny.add_trace(go.Scatter(
+                x=[-H.real[0]], y=[-H.imag[0]],  # point critique -1+0j approx
+                mode="markers", marker=dict(size=12, color="red", symbol="x"),
+                name="Point critique"
+            ))
+            fig_ny.update_layout(
+                title="Nyquist — H(jω)",
+                xaxis_title="Partie réelle",
+                yaxis_title="Partie imaginaire",
+                yaxis_scaleanchor="x",
+                height=450
+            )
+            st.plotly_chart(fig_ny, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"❌ Impossible d'afficher la réponse fréquentielle : {e}")
+        st.code(f"Détail : {type(e).__name__}: {e}")
+
+
 # =============================================================================
 # PAGE : DOCUMENTATION
 # =============================================================================
