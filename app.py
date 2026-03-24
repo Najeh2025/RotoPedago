@@ -5,6 +5,9 @@
 
 # IMPORTS
 # =============================================================================
+# RotoPédago v5.0 — Application Streamlit (VERSION CORRIGÉE)
+# Compatible Python 3.10-3.11 | Streamlit Cloud
+# =============================================================================
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
@@ -12,16 +15,41 @@ from plotly.subplots import make_subplots
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 import io
 import json
+import hashlib
 import traceback
+
+# Import conditionnel robuste de ROSS
+ROSS_AVAILABLE = False
+ROSS_IMPORT_ERROR = None
 
 try:
     import ross as rs
+    from ross.materials import steel as steel_material
     ROSS_AVAILABLE = True
+except ImportError as e:
+    ROSS_IMPORT_ERROR = str(e)
+except Exception as e:
+    ROSS_IMPORT_ERROR = f"{type(e).__name__}: {e}"
+
+# Import des helpers (fonctions globales pour le cache)
+try:
+    from utils.helpers import (
+        compute_modal_cached,
+        compute_campbell_cached,
+        hash_rotor_config,
+        validate_numeric_param,
+        format_frequency,
+        get_log_dec_color,
+        create_badge_html
+    )
 except ImportError:
-    ROSS_AVAILABLE = False
+    # Fallback si utils/helpers.py n'est pas présent
+    def hash_rotor_config(*args): return "fallback_hash"
+    def get_log_dec_color(ld): return "#22863A" if ld > 0 else "#C00000"
+    def create_badge_html(b, t): return f"<span>{t}</span>"
 
 # =============================================================================
 # CONFIGURATION
