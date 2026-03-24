@@ -393,56 +393,45 @@ class RotorBuilder:
 # CLASSE 2 : SimulationEngine
 # =============================================================================
 class SimulationEngine:
-    """Moteur de simulation ROSS avec cache et gestion d'erreurs."""
-
-    def __init__(self, rotor):
+    """Moteur de simulation ROSS avec gestion d'erreurs."""
+    
+    def __init__(self, rotor, rotor_hash: Optional[str] = None):
         self.rotor = rotor
+        self.rotor_hash = rotor_hash or hash_rotor_config([], [], [])
         self._last_error: str = ""
-
-    @st.cache_data(show_spinner=False)
-    def _run_modal_cached(_self, rotor_hash: str, speed: float):
-        return _self.rotor.run_modal(speed=speed)
-
+    
     def run_modal(self, speed_rpm: float = 0.0) -> Optional[object]:
+        """Exécute l'analyse modale avec gestion d'erreur."""
+        if not ROSS_AVAILABLE:
+            self._last_error = "ROSS non disponible"
+            return None
+        
         speed_rad = speed_rpm * np.pi / 30
+        
         try:
+            # Appel direct (le cache est géré au niveau supérieur si nécessaire)
             return self.rotor.run_modal(speed=speed_rad)
         except Exception as e:
-            self._last_error = str(e)
+            self._last_error = f"Erreur modale: {type(e).__name__}: {e}"
             return None
-
-    def run_campbell(self, speed_max_rpm: float = 8000, n_points: int = 100) -> Optional[object]:
+    
+    def run_campbell(self, speed_max_rpm: float = 8000, 
+                    n_points: int = 100) -> Optional[object]:
+        """Exécute le diagramme de Campbell."""
+        if not ROSS_AVAILABLE:
+            self._last_error = "ROSS non disponible"
+            return None
+        
         try:
-            speeds = np.linspace(0, speed_max_rpm * np.pi / 30, n_points)
-            return self.rotor.run_campbell(speeds)
+            speeds_rad = np.linspace(0, speed_max_rpm * np.pi / 30, n_points)
+            return self.rotor.run_campbell(speeds_rad)
         except Exception as e:
-            self._last_error = str(e)
+            self._last_error = f"Erreur Campbell: {type(e).__name__}: {e}"
             return None
-
-    def run_static(self) -> Optional[object]:
-        try:
-            return self.rotor.run_static()
-        except Exception as e:
-            self._last_error = str(e)
-            return None
-
-    def run_unbalance_response(self, node: int, magnitude: float,
-                                phase: float, freq_max: float) -> Optional[object]:
-        try:
-            return self.rotor.run_unbalance_response(
-                node=[node],
-                magnitude=[magnitude],
-                phase=[phase],
-                frequency_range=np.linspace(0, freq_max, 500)
-            )
-        except Exception as e:
-            self._last_error = str(e)
-            return None
-
+    
     @property
     def last_error(self) -> str:
         return self._last_error
-
 
 # =============================================================================
 # CLASSE 3 : TPValidator
