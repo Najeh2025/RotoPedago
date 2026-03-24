@@ -1211,7 +1211,7 @@ if "free_rotor" in st.session_state:
         if "free_modal" in st.session_state:
             modal = st.session_state.free_modal
             st.dataframe(_modal_table(modal), use_container_width=True)
-                mode_i = st.selectbox("Mode :", range(min(6, len(modal.evalues)//2)))
+            mode_i = st.selectbox("Mode :", range(min(6, len(modal.evalues)//2)))
                 try:
                     # Correction de la syntaxe et du nom de la variable (mode_i)
                     fig_modal = safe_plot(modal, mode=mode_i)
