@@ -1200,7 +1200,7 @@ def render_free_mode():
     
         tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique"])
        
-       with tabs[1]:
+        with tabs[1]:
             if st.button("Calculer les modes", key="free_modal_btn"):
                 engine = SimulationEngine(rotor)
                 modal = engine.run_modal()
