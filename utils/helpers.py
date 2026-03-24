@@ -6,6 +6,7 @@ import numpy as np
 from typing import Optional, Dict, List, Tuple
 import hashlib
 
+
 # =============================================================================
 # CACHE DÉCORATEURS (fonctions globales — compatibles Streamlit)
 # =============================================================================
@@ -16,8 +17,6 @@ def compute_modal_cached(rotor_data_hash: str, speed_rad: float) -> Dict:
     Cache wrapper pour run_modal — appelé depuis SimulationEngine.
     Retourne un dictionnaire sérialisable avec les résultats modaux.
     """
-    # Cette fonction est appelée via SimulationEngine._run_modal_via_cache()
-    # Le rotor réel est reconstruit à partir de rotor_data_hash dans l'app principale
     return {"cached": True, "speed_rad": speed_rad, "hash": rotor_data_hash}
 
 
