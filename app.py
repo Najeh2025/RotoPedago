@@ -1532,6 +1532,7 @@ def render_free_mode():
                                         kxy=r[4], kyx=-r[4], cxx=r[5], cyy=r[6])
                      for r in ed_b.itertuples()]
             rotor = rs.Rotor(shaft, disks, bears)
+            st.session_state.free_rotor = rotor  # On stocke le rotor dans la session
             _CACHE["free_rotor"] = rotor
             st.success(f"✅ Rotor assemblé — {len(rotor.nodes)} nœuds | Masse : {rotor.m:.2f} kg")
         except Exception as e:
@@ -1539,7 +1540,8 @@ def render_free_mode():
             _CACHE["free_rotor"] = None
 
     rotor = _CACHE.get("free_rotor")
-    if rotor:
+    if "free_rotor" in st.session_state:
+        rotor = st.session_state.free_rotor # On récupère le rotor stocké
         tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "📉 Stabilité", "📏 Statique", "🌀 Balourd", "📡 Fréq. Response"])
 
         with tabs[0]:
