@@ -1,25 +1,15 @@
-# RotoPédago v5.0 — Dépendances Stabilisées
-# Compatible Python 3.10-3.11 | Streamlit Cloud
+# RotoPédago v5.0 — Dépendances Minimales
+# Compatible Python 3.10-3.11
 
-# Core Streamlit
-streamlit>=1.28.0,<1.40.0
-
-# Visualisation interactive
-plotly>=5.17.0,<6.0.0
-
-# Scientific Computing (versions compatibles entre elles)
+streamlit>=1.28.0
+plotly>=5.17.0
 numpy>=1.24.0,<2.0.0
-scipy>=1.10.0,<1.13.0
-pandas>=2.0.0,<2.2.0
+scipy>=1.10.0
+pandas>=2.0.0
 
-# ROSS - Rotordynamic Open-Source Software
-# Nom PyPI : ross-rotordynamic | Import : import ross
-ross-rotordynamic>=0.4.0,<0.5.0
+# ROSS — Sera ignoré si non disponible (mode démo activé)
+# ross-rotordynamic>=0.4.0
 
-# Export et utilitaires
-reportlab>=3.6.12,<4.0.0
+# Utilities
 Pillow>=10.0.0
 rich>=10.14.0
-
-# Optionnel : pour déploiement local avec hot-reload
-# watchdog>=2.3.0
