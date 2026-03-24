@@ -1214,7 +1214,7 @@ def render_free_mode():
                 st.dataframe(_modal_table(modal), use_container_width=True, hide_index=True)
                 mode_i = st.selectbox("Mode :", range(min(6, len(modal.evalues)//2)))
                 try:
-                    st.plotly_chart(safe_plot(modal, mode=m_idx)), use_container_width=True)
+                    st.plotly_chart(safe_plot(modal, mode=m_idx)),use_container_width=True)
                 except:
                     try:
                         st.plotly_chart(safe_plot(modal, mode=m_idx)), use_container_width=True)
