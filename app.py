@@ -1206,7 +1206,20 @@ def _tp22_interface(tp):
                 fig_ph = unbal.plot_phase(probe=probe_node)
                 st.plotly_chart(fig_ph, use_container_width=True)
         except Exception as e:
-            st.warning(f"Visualisation avancée indisponible ({e}) — affichage simplifié.")
+            st.warning(f"Visualisation avancée indisponible ({e})")
+            # Fallback : affichage sans paramètre probe
+            try:
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.markdown("**Magnitude (Bode)**")
+                    fig_mag = unbal.plot_magnitude()
+                    st.plotly_chart(fig_mag, use_container_width=True)
+                with col_b:
+                    st.markdown("**Phase (Bode)**")
+                    fig_ph = unbal.plot_phase()
+                    st.plotly_chart(fig_ph, use_container_width=True)
+            except:
+                st.error("Impossible d'afficher les graphiques")
         
     return rotor_prev, modal, unbal
 
