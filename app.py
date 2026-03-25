@@ -448,7 +448,7 @@ class SimulationEngine:
             return None
     
     def run_unbalance_response(self, node: int, magnitude: float,
-                            phase: float, freq_max: float) -> Optional[object]:
+                                phase: float, freq_max: float) -> Optional[object]:
         """
         Calcule la réponse au balourd.
         Compatible avec ROSS >= 0.3.0
@@ -473,9 +473,9 @@ class SimulationEngine:
                     unbalance_phase=phase,
                     frequency=frequency
                 )
-            except Exception as e:
-                self._last_error = f"Erreur réponse balourd : {str(e)}"
-                return None
+        except Exception as e:
+            self._last_error = f"Erreur réponse balourd : {str(e)}"
+            return None
     
     def run_freq_response(self, node: int, force_magnitude: float,
                           force_direction: str = 'x', freq_min: float = 0,
