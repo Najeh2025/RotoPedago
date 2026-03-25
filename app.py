@@ -448,22 +448,24 @@ class SimulationEngine:
             return None
     
     def run_unbalance_response(self, node: int, magnitude: float,
-                            phase: float, freq_max: float,
-                            freq_min: float = 0) -> Optional[object]:
+                                phase: float, freq_max: float) -> Optional[object]:
         """
         Calcule la réponse au balourd.
-        ROSS utilise directement les paramètres sans créer d'objet Unbalance.
+        ROSS nécessite la création d'objets Unbalance.
         """
         try:
-            frequency_range = np.linspace(freq_min, freq_max, 500)
+            # Création de l'objet Unbalance ROSS
+            unbalance = [rs.Unbalance(node=node, magnitude=magnitude, phase=phase)]
+            
+            # Plage de fréquences
+            frequency_range = np.linspace(0, freq_max, 500)
+            
             return self.rotor.run_unbalance_response(
-                node=[node],
-                magnitude=[magnitude],
-                phase=[phase],
+                unbalance=unbalance,
                 frequency=frequency_range
             )
         except Exception as e:
-            self._last_error = f"Erreur réponse balourd : {str(e)}"
+            self._last_error = str(e)
             return None
     
     def run_freq_response(self, node: int, force_magnitude: float,
