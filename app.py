@@ -449,33 +449,33 @@ class SimulationEngine:
     
     def run_unbalance_response(self, node: int, magnitude: float,
                             phase: float, freq_max: float) -> Optional[object]:
-    """
-    Calcule la réponse au balourd.
-    Compatible avec ROSS >= 0.3.0
-    """
-    try:
-        # Création du vecteur de fréquences
-        frequency = np.linspace(0, freq_max, 500)
-        
-        # Méthode 1: Essayer avec les paramètres directs (ROSS récent)
+        """
+        Calcule la réponse au balourd.
+        Compatible avec ROSS >= 0.3.0
+        """
         try:
-            return self.rotor.run_unbalance_response(
-                node=[node],
-                magnitude=[magnitude],
-                phase=[phase],
-                frequency=frequency
-            )
-        except TypeError:
-            # Méthode 2: Ancienne API ROSS
-            return self.rotor.run_unbalance_response(
-                node=node,
-                unbalance_magnitude=magnitude,
-                unbalance_phase=phase,
-                frequency=frequency
-            )
-    except Exception as e:
-        self._last_error = f"Erreur réponse balourd : {str(e)}"
-        return None
+            # Création du vecteur de fréquences
+            frequency = np.linspace(0, freq_max, 500)
+            
+            # Méthode 1: Essayer avec les paramètres directs (ROSS récent)
+            try:
+                return self.rotor.run_unbalance_response(
+                    node=[node],
+                    magnitude=[magnitude],
+                    phase=[phase],
+                    frequency=frequency
+                )
+            except TypeError:
+                # Méthode 2: Ancienne API ROSS
+                return self.rotor.run_unbalance_response(
+                    node=node,
+                    unbalance_magnitude=magnitude,
+                    unbalance_phase=phase,
+                    frequency=frequency
+                )
+            except Exception as e:
+                self._last_error = f"Erreur réponse balourd : {str(e)}"
+                return None
     
     def run_freq_response(self, node: int, force_magnitude: float,
                           force_direction: str = 'x', freq_min: float = 0,
