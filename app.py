@@ -448,19 +448,19 @@ class SimulationEngine:
             return None
     
     def run_unbalance_response(self, node: int, magnitude: float,
-                                phase: float, freq_max: float, 
-                                freq_min: float = 0, n_points: int = 500) -> Optional[object]:
+                            phase: float, freq_max: float,
+                            freq_min: float = 0) -> Optional[object]:
         """
-        Calcule la réponse au balourd (Unbalance Response).
-        Utilise ROSS run_unbalance_response avec gestion d'erreurs robuste.
+        Calcule la réponse au balourd.
+        ROSS utilise directement les paramètres sans créer d'objet Unbalance.
         """
         try:
-            frequency_range = np.linspace(freq_min, freq_max, n_points)
-            unbalance = [rs.Unbalance(node=node, magnitude=magnitude, phase=phase)]
+            frequency_range = np.linspace(freq_min, freq_max, 500)
             return self.rotor.run_unbalance_response(
-                unbalance=unbalance,
-                frequency=frequency_range,
-                sweep="log"  # Balayage logarithmique pour meilleure résolution
+                node=[node],
+                magnitude=[magnitude],
+                phase=[phase],
+                frequency=frequency_range
             )
         except Exception as e:
             self._last_error = f"Erreur réponse balourd : {str(e)}"
@@ -468,32 +468,28 @@ class SimulationEngine:
     
     def run_freq_response(self, node: int, force_magnitude: float,
                           force_direction: str = 'x', freq_min: float = 0,
-                          freq_max: float = 5000, n_points: int = 500) -> Optional[object]:
+                          freq_max: float = 5000) -> Optional[object]:
         """
-        Calcule la réponse fréquentielle générale (Frequency Response Function - FRF).
-        Utilise ROSS run_freq_response pour les forces harmoniques externes.
-        
-        Paramètres:
-        - node: Nœud d'application de la force
-        - force_magnitude: Amplitude de la force (N)
-        - force_direction: Direction ('x' ou 'y')
-        - freq_min/max: Plage de fréquences (Hz)
-        - n_points: Nombre de points de calcul
+        Calcule la réponse fréquentielle (FRF) à une force harmonique.
+        ROSS utilise run_forced_response pour cela.
         """
         try:
-            frequency_range = np.linspace(freq_min, freq_max, n_points)
+            frequency_range = np.linspace(freq_min, freq_max, 500)
             
-            # Création de la force harmonique selon la direction
+            # Création du vecteur de force
+            # Dans ROSS, on utilise un tableau de forces complexes
             if force_direction.lower() == 'x':
-                force = [rs.Force(node=node, magnitude=force_magnitude, phase=0)]
+                dof = 0  # DDL translation X
             else:
-                # Pour direction y, on utilise le degré de liberté correspondant
-                force = [rs.Force(node=node, magnitude=force_magnitude, phase=0)]
+                dof = 1  # DDL translation Y
+            
+            # Force harmonique F = F0 * e^(j*omega*t)
+            forces = np.zeros((self.rotor.model_size, len(frequency_range)), dtype=complex)
+            forces[dof, :] = force_magnitude
             
             return self.rotor.run_freq_response(
-                force=force,
                 frequency=frequency_range,
-                output="displacement"  # Sortie en déplacement
+                forces=forces
             )
         except Exception as e:
             self._last_error = f"Erreur réponse fréquentielle : {str(e)}"
@@ -1409,8 +1405,8 @@ def _tp32_interface(tp):
 # PAGE : MODE LIBRE (ENHANCED WITH FRF)
 # =============================================================================
 def render_free_mode():
-    st.title("🏗️ Mode Libre — Simulation Personnalisée")
-    
+   # st.title("🏗️ Mode Libre — Simulation Personnalisée")
+    tabs = st.tabs(["🏗️ Géométrie", "📊 Modal", "📈 Campbell", "🌀 Balourd", "📉 FRF", "📏 Statique"])
     if not ROSS_AVAILABLE:
         st.error("ROSS non disponible.")
         return
