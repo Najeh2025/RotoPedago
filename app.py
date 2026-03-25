@@ -1198,30 +1198,14 @@ def _tp22_interface(tp):
             col_a, col_b = st.columns(2)
             with col_a:
                 st.markdown("**Magnitude (Bode)**")
-                # ROSS 2.1.0 : probe doit être un entier, pas une liste
-                fig_mag = unbal.plot_magnitude(probe=probe_node)
+                fig_mag = unbal.plot_magnitude(probe=[probe_node, 0])
                 st.plotly_chart(fig_mag, use_container_width=True)
             with col_b:
                 st.markdown("**Phase (Bode)**")
-                fig_ph = unbal.plot_phase(probe=probe_node)
+                fig_ph = unbal.plot_phase(probe=[probe_node, 0])
                 st.plotly_chart(fig_ph, use_container_width=True)
         except Exception as e:
-            # Fallback avec tentative automatique
-            try:
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.markdown("**Magnitude (Bode)**")
-                    fig_mag = unbal.plot_magnitude()
-                    st.plotly_chart(fig_mag, use_container_width=True)
-                with col_b:
-                    st.markdown("**Phase (Bode)**")
-                    fig_ph = unbal.plot_phase()
-                    st.plotly_chart(fig_ph, use_container_width=True)
-            except Exception as e2:
-                st.warning(f"Visualisation avancée indisponible ({e2}) — affichage simplifié.")
-                # Affichage des données brutes
-                st.write("Fréquences (Hz):", (unbal.frequency / (2*np.pi))[:10])
-                st.write("Amplitudes:", np.abs(unbal.response[probe_node*2, :10]))
+            st.warning(f"Visualisation avancée indisponible ({e}) — affichage simplifié.")
         
     return rotor_prev, modal, unbal
 
